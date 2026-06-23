@@ -1,0 +1,133 @@
+// Session + API wrapper: JWT stored in localStorage, Authorization header on every request.
+export interface Session {
+  token: string
+  role: string
+  email: string
+  // Admin-provisioned account with a temporary password: the user is locked onto
+  // /change-password until they set a new one (A.2).
+  mustChangePassword?: boolean
+}
+
+// The API lives at the root (/auth, /files, /setup…) while the UI is served under /app/.
+// The global $fetch prefixes paths with app.baseURL='/app/', so for API calls we use
+// a separate instance with baseURL='/' — otherwise requests go to /app/* and hit the SPA.
+export const apiFetch = $fetch.create({ baseURL: '/' })
+
+export const useSession = () => useState<Session>('session', () => ({ token: '', role: '', email: '' }))
+
+// Whether the initial admin onboarding is needed (no admin exists yet).
+// null = not yet determined; true/false = cached response from /setup/status.
+export const useSetupNeeded = () => useState<boolean | null>('setupNeeded', () => null)
+
+// Whether WebAuthn is configured server-side (BASE_DOMAIN set). null = not yet determined.
+// Drives whether the login screen offers the passkey button.
+export const useWebauthnEnabled = () => useState<boolean | null>('webauthnEnabled', () => null)
+
+// tokenExp returns the JWT's exp (unix seconds), or 0 if missing/unparseable.
+// Used to prevent a stale X-Token (from a cached/late response) from regressing the session.
+function tokenExp(t: string): number {
+  try {
+    const payload = t.split('.')[1] || ''
+    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))).exp || 0
+  } catch {
+    return 0
+  }
+}
+
+export function setSession(s: Session) {
+  const sess = useSession()
+  sess.value = s
+  if (import.meta.client) localStorage.setItem('kf_session', JSON.stringify(s))
+}
+
+export function clearSession() {
+  setSession({ token: '', role: '', email: '' })
+}
+
+export function useApi() {
+  const sess = useSession()
+
+  async function request<T = any>(path: string, opts: any = {}): Promise<T> {
+    const headers: Record<string, string> = { ...(opts.headers || {}) }
+    if (sess.value.token) headers.Authorization = `Bearer ${sess.value.token}`
+    try {
+      // .raw — needed to access response headers: the server renews the session via X-Token.
+      const res = await apiFetch.raw<T>(path, { ...opts, headers })
+      const fresh = res.headers.get('X-Token')
+      // Only adopt a renewed token if it isn't older than the current one. A cached
+      // or slow-in-flight response can carry a stale X-Token; saving it would regress
+      // the session to an earlier (possibly expired) token and force a spurious logout.
+      if (fresh && fresh !== sess.value.token && tokenExp(fresh) >= tokenExp(sess.value.token)) {
+        setSession({ ...sess.value, token: fresh })
+      }
+      return res._data as T
+    } catch (e: any) {
+      if (e?.response?.status === 401) {
+        clearSession()
+        await navigateTo('/login')
+      }
+      throw e
+    }
+  }
+
+  return { request, session: sess }
+}
+
+type LoginUser = { role: string; email: string; must_change_password?: boolean }
+type LoginSuccess = { token: string; user: LoginUser }
+type LoginMfaRequired = { mfa_required: true; mfa_token: string; methods: string[] }
+type LoginResult = LoginSuccess | LoginMfaRequired
+
+// Login: fetches a token and stores the session, OR returns an MFA challenge without setting a session.
+export async function login(email: string, password: string): Promise<LoginResult> {
+  const res = await apiFetch<LoginResult>('/auth/login', {
+    method: 'POST',
+    body: { email, password },
+  })
+  if ('mfa_required' in res && res.mfa_required) {
+    // MFA step required — do not set session yet; return challenge to caller.
+    return res
+  }
+  const r = res as LoginSuccess
+  setSession({
+    token: r.token,
+    role: r.user.role,
+    email: r.user.email,
+    mustChangePassword: r.user.must_change_password ?? false,
+  })
+  return r
+}
+
+// Passwordless sign-in with a passkey (discoverable WebAuthn): the authenticator picks the
+// credential and identifies the user. Uses @github/webauthn-json's JSON get() for base64url.
+export async function loginWithPasskey() {
+  const begin = await apiFetch<{ options: any; session_token: string }>('/auth/webauthn/login/begin', { method: 'POST' })
+  const { get } = await import('@github/webauthn-json')
+  const assertion = await get(begin.options)
+  const res = await apiFetch<LoginSuccess>('/auth/webauthn/login/finish', {
+    method: 'POST',
+    body: { session_token: begin.session_token, assertion },
+  })
+  setSession({
+    token: res.token,
+    role: res.user.role,
+    email: res.user.email,
+    mustChangePassword: res.user.must_change_password ?? false,
+  })
+  return res
+}
+
+// Complete TOTP MFA: exchange mfa_token + TOTP/backup code for a full session token.
+export async function completeMfaTotp(mfaToken: string, code: string) {
+  const res = await apiFetch<LoginSuccess>('/auth/mfa/totp', {
+    method: 'POST',
+    body: { mfa_token: mfaToken, code },
+  })
+  setSession({
+    token: res.token,
+    role: res.user.role,
+    email: res.user.email,
+    mustChangePassword: res.user.must_change_password ?? false,
+  })
+  return res
+}

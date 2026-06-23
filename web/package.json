@@ -1,0 +1,26 @@
+{
+  "name": "discodrive-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate && rm -rf dist && cp -r .output/public dist && touch dist/.gitkeep",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@github/webauthn-json": "^2.1.1",
+    "@nuxtjs/i18n": "^10.4.0",
+    "qrcode": "^1.5.4",
+    "scrypt-js": "^3.0.1"
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.18",
+    "@types/qrcode": "^1.5.5",
+    "@nuxt/icon": "^1.10.3",
+    "@nuxtjs/tailwindcss": "^6.12.2",
+    "@types/node": "^25.9.3",
+    "nuxt": "^3.14.1592",
+    "vitest": "^2.1.8"
+  }
+}

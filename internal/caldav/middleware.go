@@ -1,0 +1,74 @@
+package caldav
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"net/http"
+
+	"discodrive/internal/auth"
+	"discodrive/internal/db"
+)
+
+const maxBody = 1 << 20 // 1 MB per object
+
+// SettingsReader returns a setting value (e.g. the caldav.enabled flag).
+type SettingsReader interface {
+	GetSetting(ctx context.Context, key string) (db.Setting, error)
+}
+
+// Handler wraps the caldav.Handler with a middleware chain: enable-flag → Basic-auth → raw-body.
+// backend is needed for methods that go-webdav does not dispatch (MKCALENDAR).
+func Handler(authSvc *auth.Service, settings SettingsReader, backend *Backend, dav http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if v, err := settings.GetSetting(r.Context(), "caldav.enabled"); err != nil || v.Value != "true" {
+			http.Error(w, "CalDAV disabled", http.StatusForbidden)
+			return
+		}
+		email, pass, ok := r.BasicAuth()
+		if !ok {
+			unauthorized(w)
+			return
+		}
+		uid, _, ok := authSvc.VerifyWebdavPassword(r.Context(), email, pass)
+		if !ok {
+			unauthorized(w)
+			return
+		}
+		ctx := WithUserID(r.Context(), uid)
+		// PROPPATCH is not implemented by go-webdav (returns 501), which breaks Apple clients.
+		// We handle it ourselves with a no-op 207 response (see proppatch.go).
+		if r.Method == "PROPPATCH" {
+			backend.HandleProppatch(w, r.WithContext(ctx))
+			return
+		}
+		// MKCALENDAR is not dispatched by go-webdav (405) — this is how Apple Reminders
+		// creates a VTODO collection. We create it ourselves (see mkcalendar.go).
+		if r.Method == "MKCALENDAR" {
+			backend.HandleMkcalendar(w, r.WithContext(ctx))
+			return
+		}
+		if r.Method == http.MethodPut {
+			raw, err := io.ReadAll(io.LimitReader(r.Body, maxBody))
+			if err != nil {
+				http.Error(w, "error reading body", http.StatusBadRequest)
+				return
+			}
+			ctx = WithRawBody(ctx, raw)
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+		}
+		dav.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func unauthorized(w http.ResponseWriter) {
+	w.Header().Set("WWW-Authenticate", `Basic realm="DiscoDrive"`)
+	http.Error(w, "authorization required", http.StatusUnauthorized)
+}
+
+// WellKnown redirects /.well-known/caldav to /caldav/ (discovery).
+func WellKnown() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, prefix+"/", http.StatusMovedPermanently)
+	})
+}

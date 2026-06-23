@@ -1,0 +1,6 @@
+{
+  // Nuxt generates the real config (aliases, auto-import types) into .nuxt/tsconfig.json.
+  // This root tsconfig just extends it so the IDE/TS server resolves `~` aliases and
+  // auto-imported composables (ref, useI18n, useSession, …).
+  "extends": "./.nuxt/tsconfig.json"
+}

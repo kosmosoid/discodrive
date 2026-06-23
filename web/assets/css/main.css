@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme palette (RGB triples for rgb(var(--c-*) / <alpha>) in tailwind.config.js).
+   :root is dark by default; the .light class on <html> switches to light. */
+:root {
+  --c-bg: 10 14 20;
+  --c-panel: 15 22 32;
+  --c-panel2: 20 29 43;
+  --c-line: 30 42 58;
+  --c-ink: 200 211 224;
+  --c-muted: 107 124 147;
+  --c-accent: 34 211 238;
+  --c-accent2: 52 211 153;
+  --c-danger: 248 113 113;
+}
+:root.light {
+  --c-bg: 245 247 250;
+  --c-panel: 255 255 255;
+  --c-panel2: 238 242 247;
+  --c-line: 216 224 234;
+  --c-ink: 27 39 51;
+  --c-muted: 91 107 128;
+  --c-accent: 8 145 178;
+  --c-accent2: 5 150 105;
+  --c-danger: 220 38 38;
+}
+
+@layer base {
+  html, body, #__nuxt {
+    @apply h-full;
+  }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    background-image:
+      radial-gradient(1200px 600px at 90% -10%, rgb(var(--c-accent) / 0.06), transparent),
+      radial-gradient(900px 500px at -10% 110%, rgb(var(--c-accent2) / 0.05), transparent);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition;
+  }
+  .btn-accent {
+    @apply btn bg-accent/15 text-accent ring-1 ring-accent/30 hover:bg-accent/25;
+  }
+  .btn-ghost {
+    @apply btn text-muted hover:text-ink hover:bg-ink/5;
+  }
+  .btn-danger {
+    @apply btn text-danger ring-1 ring-danger/30 hover:bg-danger/10;
+  }
+  .card {
+    @apply rounded-xl border border-line bg-panel/80 backdrop-blur;
+  }
+  .input {
+    @apply w-full rounded-md border border-line bg-panel2 px-3 py-2 text-sm text-ink
+           outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/30 placeholder:text-muted;
+  }
+}

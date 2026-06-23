@@ -1,0 +1,86 @@
+package carddav
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"net/http"
+
+	"discodrive/internal/auth"
+	"discodrive/internal/db"
+)
+
+const maxBody = 1 << 20 // 1 MB per object
+
+// SettingsReader returns a setting value (e.g. the carddav.enabled flag).
+type SettingsReader interface {
+	GetSetting(ctx context.Context, key string) (db.Setting, error)
+}
+
+// Handler wraps the carddav.Handler with a middleware chain: enable-flag → Basic-auth → raw-body.
+// backend is needed for methods that go-webdav does not dispatch (PROPPATCH).
+func Handler(authSvc *auth.Service, settings SettingsReader, backend *Backend, dav http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if v, err := settings.GetSetting(r.Context(), "carddav.enabled"); err != nil || v.Value != "true" {
+			http.Error(w, "CardDAV disabled", http.StatusForbidden)
+			return
+		}
+		email, pass, ok := r.BasicAuth()
+		if !ok {
+			unauthorized(w)
+			return
+		}
+		uid, _, ok := authSvc.VerifyWebdavPassword(r.Context(), email, pass)
+		if !ok {
+			unauthorized(w)
+			return
+		}
+		ctx := WithUserID(r.Context(), uid)
+		// PROPPATCH is not implemented by go-webdav (returns 501), which breaks Apple clients.
+		// We handle it ourselves with a no-op 207 response (see proppatch.go).
+		if r.Method == "PROPPATCH" {
+			backend.HandleProppatch(w, r.WithContext(ctx))
+			return
+		}
+		// PROPFIND: pass through go-webdav and augment address books with getctag/supported-report-set
+		// (required by macOS Contacts to start a sync). See propfind_augment.go.
+		if r.Method == "PROPFIND" {
+			backend.servePropfind(w, r.WithContext(ctx), dav)
+			return
+		}
+		// REPORT (multiget/query): serve raw vCard instead of the re-serialized version. See report_augment.go.
+		if r.Method == "REPORT" {
+			backend.serveReport(w, r.WithContext(ctx), dav)
+			return
+		}
+		// GET/HEAD of an object — serve raw vCard byte-for-byte (go-webdav's re-serialization
+		// fails on cards with photos, causing a truncated response). See rawget.go.
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			if backend.ServeRawObject(w, r.WithContext(ctx)) {
+				return
+			}
+		}
+		if r.Method == http.MethodPut {
+			raw, err := io.ReadAll(io.LimitReader(r.Body, maxBody))
+			if err != nil {
+				http.Error(w, "error reading body", http.StatusBadRequest)
+				return
+			}
+			ctx = WithRawBody(ctx, raw)
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+		}
+		dav.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func unauthorized(w http.ResponseWriter) {
+	w.Header().Set("WWW-Authenticate", `Basic realm="DiscoDrive"`)
+	http.Error(w, "authorization required", http.StatusUnauthorized)
+}
+
+// WellKnown redirects /.well-known/carddav to /carddav/ (discovery).
+func WellKnown() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, prefix+"/", http.StatusMovedPermanently)
+	})
+}
