@@ -18,6 +18,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/server ./cmd/server
 # Stage 3: minimal non-root runtime.
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/server /server
-EXPOSE 8080
+# Documentation only (EXPOSE does not publish). The runtime port is set via APP_PORT env.
+ARG APP_PORT=8080
+EXPOSE ${APP_PORT}
 USER nonroot:nonroot
 ENTRYPOINT ["/server"]

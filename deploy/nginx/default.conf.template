@@ -1,4 +1,11 @@
 # nginx reverse proxy in front of the single Go binary.
+#
+# This is an nginx TEMPLATE: the official nginx image runs envsubst over it at startup
+# (see 20-envsubst-on-templates.sh) and writes the result to /etc/nginx/conf.d/default.conf.
+# Only the APP_PORT variable is substituted — NGINX_ENVSUBST_FILTER=^APP_PORT$ keeps
+# nginx runtime vars ($host/$scheme/…) intact. Its value must match the app's APP_PORT
+# so proxy_pass targets the right upstream port.
+#
 # HTTP (80) — local development and lenient clients (Thunderbird, file WebDAV).
 # HTTPS (443, mkcert dev cert) — required for Apple CalDAV/CardDAV: iOS/macOS do NOT send
 # the Basic password over unencrypted HTTP. Locations are duplicated in both server blocks (dev config).
@@ -20,7 +27,7 @@ server {
     client_max_body_size 0;   # the app enforces the size limit, not nginx
 
     location /dav/ {
-        proxy_pass http://app:8080;
+        proxy_pass http://app:${APP_PORT};
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -31,7 +38,7 @@ server {
     }
 
     location /sync/events {
-        proxy_pass http://app:8080;
+        proxy_pass http://app:${APP_PORT};
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -44,7 +51,7 @@ server {
     }
 
     location / {
-        proxy_pass http://app:8080;
+        proxy_pass http://app:${APP_PORT};
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -67,7 +74,7 @@ server {
     ssl_certificate_key /etc/nginx/certs/dev-key.pem;
 
     location /dav/ {
-        proxy_pass http://app:8080;
+        proxy_pass http://app:${APP_PORT};
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -78,7 +85,7 @@ server {
     }
 
     location /sync/events {
-        proxy_pass http://app:8080;
+        proxy_pass http://app:${APP_PORT};
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -91,7 +98,7 @@ server {
     }
 
     location / {
-        proxy_pass http://app:8080;
+        proxy_pass http://app:${APP_PORT};
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;

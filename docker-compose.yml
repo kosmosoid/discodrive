@@ -16,22 +16,27 @@ services:
     volumes:
       - ./data:/data
     expose:
-      - "8080"
+      - "${APP_PORT:-8080}"
     depends_on:
       postgres:
         condition: service_healthy
 
   nginx:
     image: nginx:alpine
+    # APP_PORT is substituted into default.conf.template by the image's envsubst step.
+    # The filter restricts substitution to APP_PORT so nginx vars ($host, $scheme, …) survive.
+    environment:
+      APP_PORT: "${APP_PORT:-8080}"
+      NGINX_ENVSUBST_FILTER: "^APP_PORT$$"
     volumes:
-      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
       # data is also mounted into nginx (read-only) for zero-copy X-Accel serving
       - ./data:/data:ro
       # dev TLS (mkcert): Apple clients only send Basic auth over HTTPS
       - ./deploy/nginx/certs:/etc/nginx/certs:ro
     ports:
-      - "8080:80"
-      - "8443:443"
+      - "${NGINX_HTTP_PORT:-8080}:80"
+      - "${NGINX_HTTPS_PORT:-8443}:443"
     depends_on:
       - app
 
