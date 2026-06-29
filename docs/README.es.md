@@ -14,6 +14,8 @@ Tus archivos se guardan como archivos normales, en carpetas normales del disco. 
 
 Multiplataforma desde el diseño: Apple, Windows, Linux y Android.
 
+**Descargar las apps:** las versiones de escritorio (macOS/Windows/Linux) y Android están en la [página de releases](https://github.com/kosmosoid/discodrive-apps/releases/latest); la app de iOS se compila desde el código fuente. Todos los clientes en [discodrive-apps](https://github.com/kosmosoid/discodrive-apps).
+
 ---
 
 ## Qué obtienes

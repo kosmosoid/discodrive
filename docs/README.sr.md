@@ -14,6 +14,8 @@ DiscoDrive је self-hosted замена за гомилу претплата и
 
 Вишеплатформски од темеља: Apple, Windows, Linux и Android.
 
+**Преузми апликације:** десктоп билдови (macOS/Windows/Linux) и Android налазе се на [страници издања](https://github.com/kosmosoid/discodrive-apps/releases/latest); iOS апликација се компајлира из изворног кода. Сви клијенти на [discodrive-apps](https://github.com/kosmosoid/discodrive-apps).
+
 ---
 
 ## Шта добијаш

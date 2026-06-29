@@ -14,6 +14,8 @@ Your files are stored as ordinary files in ordinary folders on disk. If you ever
 
 Cross-platform by design: Apple, Windows, Linux and Android.
 
+**Get the apps:** desktop (macOS/Windows/Linux) and Android builds are on the [releases page](https://github.com/kosmosoid/discodrive-apps/releases/latest); the iOS app is built from source. See [discodrive-apps](https://github.com/kosmosoid/discodrive-apps) for all clients.
+
 ---
 
 ## What's inside
