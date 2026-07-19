@@ -14,6 +14,7 @@ const PALETTE = ['#22d3ee', '#34d399', '#f59e0b', '#f43f5e', '#a78bfa', '#3b82f6
 const { t, tm, rt } = useI18n()
 const { request } = useApi()
 const { confirm, prompt } = useDialog()
+const { today } = useToday()
 
 const FREQ_OPTIONS = computed(() => [
   { value: '', label: t('calendar.freq_none') },
@@ -88,7 +89,7 @@ function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
-function isToday(d: Date): boolean { return isSameDay(d, new Date()) }
+function isToday(d: Date): boolean { return isSameDay(d, today.value) }
 function isoToLocal(iso: string): string {
   if (!iso) return ''; const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')

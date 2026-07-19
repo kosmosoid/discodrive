@@ -1,7 +1,9 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     env_file: .env
+    command: ["postgres", "-c", "timezone=${TZ:-UTC}", "-c", "log_timezone=${TZ:-UTC}"]
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -12,6 +14,7 @@ services:
 
   app:
     build: .
+    restart: unless-stopped
     env_file: .env
     volumes:
       - ./data:/data
@@ -23,11 +26,13 @@ services:
 
   nginx:
     image: nginx:alpine
+    restart: unless-stopped
     # APP_PORT is substituted into default.conf.template by the image's envsubst step.
     # The filter restricts substitution to APP_PORT so nginx vars ($host, $scheme, …) survive.
     environment:
       APP_PORT: "${APP_PORT:-8080}"
       NGINX_ENVSUBST_FILTER: "^APP_PORT$$"
+      TZ: "${TZ:-UTC}"
     volumes:
       - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
       # data is also mounted into nginx (read-only) for zero-copy X-Accel serving
