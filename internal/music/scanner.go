@@ -147,11 +147,12 @@ func (ix *Indexer) IndexNode(ctx context.Context, userID, nodeID, diskPath strin
 		return err
 	}
 
+	// Duration is stored as a valid value even when the probe fails (0 = "probed,
+	// unknown"): NULL is reserved for rows that were never probed, so the scan
+	// change-gate can tell "needs enrichment" from "nothing more to extract"
+	// and does not re-index unprobeable files forever.
 	dur, br := ProbeAudio(diskPath, meta.Suffix)
-	durPg := pgtype.Int4{}
-	if dur > 0 {
-		durPg = pgtype.Int4{Int32: int32(dur), Valid: true}
-	}
+	durPg := pgtype.Int4{Int32: int32(dur), Valid: true}
 	brPg := pgtype.Int4{}
 	if br > 0 {
 		brPg = pgtype.Int4{Int32: int32(br), Valid: true}
@@ -322,13 +323,13 @@ func (ix *Indexer) ScanFolder(ctx context.Context, userID, folderNodeID string) 
 		nodeIDStr := db.UUIDString(node.ID)
 
 		// Change-gate: skip if song is already indexed, up to date by timestamp,
-		// AND has a non-zero duration. Re-index if duration is NULL/zero so that
-		// previously indexed songs without duration get enriched on next scan.
+		// AND has been probed for duration. NULL duration marks legacy rows
+		// indexed before probing existed — re-index those once to enrich them;
+		// a valid 0 means "probed, nothing to extract" and is left alone.
 		existing, err := ix.q.GetSongByNode(ctx, node.ID)
 		if err == nil && node.ModifiedAt.Valid && existing.UpdatedAt.Valid {
 			upToDate := !existing.UpdatedAt.Time.Before(node.ModifiedAt.Time)
-			hasDuration := existing.Duration.Valid && existing.Duration.Int32 > 0
-			if upToDate && hasDuration {
+			if upToDate && existing.Duration.Valid {
 				continue
 			}
 		} else if !errors.Is(err, pgx.ErrNoRows) && err != nil {

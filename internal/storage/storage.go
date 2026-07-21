@@ -42,8 +42,10 @@ type Storage interface {
 	Open(rel string) (*os.File, error)
 	// AbsPath returns the absolute path (for X-Accel / direct reads).
 	AbsPath(rel string) (string, error)
-	// Walk returns the subtree under rel (parents before children), with relative paths.
-	Walk(rel string) ([]DiskEntry, error)
+	// Walk returns the subtree under rel (parents before children), with relative
+	// paths. Unreadable directories are skipped rather than aborting the walk;
+	// partial reports whether anything was skipped (the listing is incomplete).
+	Walk(rel string) (entries []DiskEntry, partial bool, err error)
 }
 
 // LocalDisk is a Storage implementation backed by the local filesystem rooted at root.
@@ -180,31 +182,35 @@ func (d *LocalDisk) AbsPath(rel string) (string, error) {
 	return d.abs(rel)
 }
 
-func (d *LocalDisk) Walk(rel string) ([]DiskEntry, error) {
+func (d *LocalDisk) Walk(rel string) ([]DiskEntry, bool, error) {
 	full, err := d.abs(rel)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	var out []DiskEntry
+	partial := false
 	walkErr := filepath.WalkDir(full, func(p string, e fs.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
 			}
-			return err
+			// Unreadable entry: skip its subtree, keep walking the rest.
+			partial = true
+			return nil
 		}
 		if p == full {
 			return nil // skip the root directory itself
 		}
 		r, err := filepath.Rel(d.root, p)
 		if err != nil {
-			return err
+			partial = true
+			return nil
 		}
 		out = append(out, DiskEntry{Rel: filepath.ToSlash(r), IsDir: e.IsDir()})
 		return nil
 	})
 	if walkErr != nil && !os.IsNotExist(walkErr) {
-		return nil, walkErr
+		return nil, partial, walkErr
 	}
-	return out, nil
+	return out, partial, nil
 }

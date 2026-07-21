@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,6 +38,11 @@ type FileService struct {
 	pool *pgxpool.Pool
 	q    *db.Queries
 	st   Storage
+
+	// rescanMu serializes Rescan: the periodic ticker and the fsnotify watcher
+	// may fire together, and two concurrent walks would race to insert the same
+	// discovered nodes.
+	rescanMu sync.Mutex
 }
 
 func NewFileService(pool *pgxpool.Pool, st Storage) *FileService {
@@ -629,18 +636,23 @@ func (s *FileService) TrashGC(ctx context.Context, olderThan time.Duration) erro
 }
 
 // Rescan reconciles disk and DB for all users: files added outside the service are
-// imported into nodes+change_log; missing nodes are soft-deleted.
+// imported into nodes+change_log; missing nodes are soft-deleted. One user's
+// failure does not block the others; all errors are joined into the result.
 func (s *FileService) Rescan(ctx context.Context) error {
+	s.rescanMu.Lock()
+	defer s.rescanMu.Unlock()
+
 	users, err := s.q.ListUserIDs(ctx)
 	if err != nil {
 		return err
 	}
+	var errs []error
 	for _, uid := range users {
 		if err := s.rescanUser(ctx, uid); err != nil {
-			return err
+			errs = append(errs, fmt.Errorf("user %s: %w", db.UUIDString(uid), err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (s *FileService) rescanUser(ctx context.Context, uid pgtype.UUID) error {
@@ -669,10 +681,11 @@ func (s *FileService) rescanUser(ctx context.Context, uid pgtype.UUID) error {
 		}
 	}
 
-	entries, err := s.st.Walk(userID)
+	entries, partial, err := s.st.Walk(userID)
 	if err != nil {
 		return err
 	}
+	var errs []error
 	seen := make(map[string]bool, len(entries))
 	for _, e := range entries {
 		seen[e.Rel] = true
@@ -692,9 +705,19 @@ func (s *FileService) rescanUser(ctx context.Context, uid pgtype.UUID) error {
 		}
 		node, err := s.createDiscovered(ctx, uid, parentUUID, e)
 		if err != nil {
-			return err
+			// One broken entry (unreadable file, name conflict) must not stop
+			// the import of everything else.
+			errs = append(errs, fmt.Errorf("%s: %w", e.Rel, err))
+			continue
 		}
 		byPath[e.Rel] = node
+	}
+
+	// An incomplete walk is no proof of deletion: skip the missing-node sweep
+	// so nodes under unreadable directories are not falsely soft-deleted.
+	if partial {
+		errs = append(errs, errors.New("walk incomplete (unreadable directories), missing-node sweep skipped"))
+		return errors.Join(errs...)
 	}
 
 	for path, n := range byPath {
@@ -702,10 +725,10 @@ func (s *FileService) rescanUser(ctx context.Context, uid pgtype.UUID) error {
 			continue
 		}
 		if err := s.markMissing(ctx, uid, n); err != nil {
-			return err
+			errs = append(errs, fmt.Errorf("%s: %w", path, err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (s *FileService) createDiscovered(ctx context.Context, uid, parentUUID pgtype.UUID, e DiskEntry) (db.Node, error) {
