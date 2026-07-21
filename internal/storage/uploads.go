@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"maps"
 	"sync"
 	"time"
 )
@@ -53,18 +54,40 @@ func (u *Uploads) Init(userID string, parentID *string, name string) (string, er
 
 // GC removes sessions idle for longer than maxAge, deleting their staged temp files.
 // Prevents abandoned resumable uploads from leaking memory and disk indefinitely.
+//
+// Lock discipline: u.mu and a session's s.mu are never held together — Complete
+// acquires them in the opposite order, and holding u.mu while waiting on a busy
+// session freezes Init/Chunk/Status for everyone (AB-BA deadlock; froze every
+// upload in prod until restart).
 func (u *Uploads) GC(maxAge time.Duration) {
 	cutoff := time.Now().Add(-maxAge)
 	u.mu.Lock()
+	candidates := make(map[string]*uploadSession, len(u.m))
+	maps.Copy(candidates, u.m)
+	u.mu.Unlock()
+
+	var staleIDs []string
 	var stale []*uploadSession
-	for id, s := range u.m {
-		s.mu.Lock()
+	for id, s := range candidates {
+		if !s.mu.TryLock() {
+			continue // an in-flight chunk/complete holds the session: it is active
+		}
 		idle := s.lastTouch.Before(cutoff)
 		s.mu.Unlock()
 		if idle {
+			staleIDs = append(staleIDs, id)
 			stale = append(stale, s)
-			delete(u.m, id)
 		}
+	}
+	if len(staleIDs) == 0 {
+		return
+	}
+	// A session touched in the window between the idle check and this delete is
+	// dropped anyway: it had been idle past maxAge, the client gets
+	// ErrUploadNotFound on its next request and restarts the upload.
+	u.mu.Lock()
+	for _, id := range staleIDs {
+		delete(u.m, id)
 	}
 	u.mu.Unlock()
 	for _, s := range stale {
@@ -134,25 +157,28 @@ func (u *Uploads) Status(id, userID string) (int, error) {
 }
 
 // Complete finalizes the upload: the assembled file goes through Push, and the
-// session and temp file are removed.
+// session and temp file are removed. The session mutex is released before the
+// map delete — see the lock-discipline note on GC.
 func (u *Uploads) Complete(ctx context.Context, id, userID string) (PushResult, error) {
 	s, err := u.get(id, userID)
 	if err != nil {
 		return PushResult{}, err
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	f, err := u.st.Open(s.tmpRel)
 	if err != nil {
+		s.mu.Unlock()
 		return PushResult{}, err
 	}
 	res, err := u.fs.Push(ctx, s.userID, s.parentID, s.name, nil, "", f)
 	_ = f.Close()
 	if err != nil {
+		s.mu.Unlock()
 		return PushResult{}, err
 	}
 	_ = u.st.Remove(s.tmpRel)
+	s.mu.Unlock()
+
 	u.mu.Lock()
 	delete(u.m, id)
 	u.mu.Unlock()
