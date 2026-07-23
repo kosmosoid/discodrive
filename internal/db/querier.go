@@ -273,6 +273,11 @@ type Querier interface {
 	RatingsForUser(ctx context.Context, userID pgtype.UUID) ([]RatingsForUserRow, error)
 	// Returns recent play_history rows for the caller, joined to song+album+artist.
 	RecentPlayHistory(ctx context.Context, arg RecentPlayHistoryParams) ([]RecentPlayHistoryRow, error)
+	// Append change_log rows for every live strict descendant of prefix. Needed after
+	// a subtree path rewrite (move/rename): cursor-based clients (and the scoped feed,
+	// which filters on current disk_path) only see rows recorded after their cursor,
+	// so without these rows a folder moved into the sync scope arrives empty.
+	RecordSubtreeChanges(ctx context.Context, arg RecordSubtreeChangesParams) error
 	RefreshAlbumSongCount(ctx context.Context, id pgtype.UUID) error
 	RenameWebAuthnCredential(ctx context.Context, arg RenameWebAuthnCredentialParams) error
 	// Rewrite disk_path of a node and its whole subtree on rename/move (mirrors the tree).

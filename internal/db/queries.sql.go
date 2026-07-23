@@ -2612,6 +2612,40 @@ func (q *Queries) NotificationPrefsForEvent(ctx context.Context, arg Notificatio
 	return items, nil
 }
 
+const recordSubtreeChanges = `-- name: RecordSubtreeChanges :exec
+WITH descendants AS (
+    SELECT id, version, row_number() OVER (ORDER BY disk_path) AS rn
+    FROM nodes
+    WHERE user_id = $1
+      AND disk_path LIKE $2::text || '/%'
+      AND deleted_at IS NULL
+),
+bump AS (
+    UPDATE users SET change_seq = change_seq + (SELECT count(*) FROM descendants)
+    WHERE id = $1
+    RETURNING change_seq
+)
+INSERT INTO change_log (user_id, node_id, seq, op, version)
+SELECT $1, d.id,
+       (SELECT change_seq FROM bump) - (SELECT count(*) FROM descendants) + d.rn,
+       'move', d.version
+FROM descendants d
+`
+
+type RecordSubtreeChangesParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Prefix string      `json:"prefix"`
+}
+
+// Append change_log rows for every live strict descendant of prefix. Needed after
+// a subtree path rewrite (move/rename): cursor-based clients (and the scoped feed,
+// which filters on current disk_path) only see rows recorded after their cursor,
+// so without these rows a folder moved into the sync scope arrives empty.
+func (q *Queries) RecordSubtreeChanges(ctx context.Context, arg RecordSubtreeChangesParams) error {
+	_, err := q.db.Exec(ctx, recordSubtreeChanges, arg.UserID, arg.Prefix)
+	return err
+}
+
 const renameWebAuthnCredential = `-- name: RenameWebAuthnCredential :exec
 UPDATE webauthn_credentials SET name = $3 WHERE id = $1 AND user_id = $2
 `

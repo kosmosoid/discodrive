@@ -203,6 +203,9 @@ func (s *FileService) Rename(ctx context.Context, userID, nodeID, newName string
 	if err := recordChange(ctx, qtx, owner, node.ID, "update", updated.Version); err != nil {
 		return db.Node{}, err
 	}
+	if err := qtx.RecordSubtreeChanges(ctx, db.RecordSubtreeChangesParams{UserID: owner, Prefix: newRel}); err != nil {
+		return db.Node{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return db.Node{}, err
 	}
@@ -249,6 +252,9 @@ func (s *FileService) Move(ctx context.Context, userID, nodeID string, parentID 
 		return db.Node{}, err
 	}
 	if err := recordChange(ctx, qtx, owner, node.ID, "move", updated.Version); err != nil {
+		return db.Node{}, err
+	}
+	if err := qtx.RecordSubtreeChanges(ctx, db.RecordSubtreeChangesParams{UserID: owner, Prefix: newRel}); err != nil {
 		return db.Node{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {

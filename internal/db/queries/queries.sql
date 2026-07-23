@@ -160,6 +160,29 @@ SET disk_path = sqlc.arg(new_prefix)::text || substring(disk_path FROM char_leng
 WHERE user_id = sqlc.arg(user_id)
   AND (disk_path = sqlc.arg(old_prefix)::text OR disk_path LIKE sqlc.arg(old_prefix)::text || '/%');
 
+-- Append change_log rows for every live strict descendant of prefix. Needed after
+-- a subtree path rewrite (move/rename): cursor-based clients (and the scoped feed,
+-- which filters on current disk_path) only see rows recorded after their cursor,
+-- so without these rows a folder moved into the sync scope arrives empty.
+-- name: RecordSubtreeChanges :exec
+WITH descendants AS (
+    SELECT id, version, row_number() OVER (ORDER BY disk_path) AS rn
+    FROM nodes
+    WHERE user_id = sqlc.arg(user_id)
+      AND disk_path LIKE sqlc.arg(prefix)::text || '/%'
+      AND deleted_at IS NULL
+),
+bump AS (
+    UPDATE users SET change_seq = change_seq + (SELECT count(*) FROM descendants)
+    WHERE id = sqlc.arg(user_id)
+    RETURNING change_seq
+)
+INSERT INTO change_log (user_id, node_id, seq, op, version)
+SELECT sqlc.arg(user_id), d.id,
+       (SELECT change_seq FROM bump) - (SELECT count(*) FROM descendants) + d.rn,
+       'move', d.version
+FROM descendants d;
+
 -- Like RewriteSubtreePaths, but only for trashed nodes — so restoring doesn't
 -- touch a LIVE node sharing the same disk_path (the name was reused after deletion).
 -- name: RewriteTombstonedSubtreePaths :exec
