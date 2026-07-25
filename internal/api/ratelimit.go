@@ -26,15 +26,36 @@ func newLoginLimiter() *rateLimiter {
 func (rl *rateLimiter) allow(key string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	if time.Since(rl.windowStart) > rl.window {
-		rl.counts = make(map[string]int)
-		rl.windowStart = time.Now()
-	}
+	rl.roll()
 	if rl.counts[key] >= rl.limit {
 		return false
 	}
 	rl.counts[key]++
 	return true
+}
+
+// peek reports whether the key is within the limit without consuming an attempt.
+func (rl *rateLimiter) peek(key string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	rl.roll()
+	return rl.counts[key] < rl.limit
+}
+
+// record consumes one attempt for the key.
+func (rl *rateLimiter) record(key string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	rl.roll()
+	rl.counts[key]++
+}
+
+// roll resets the window when it has elapsed. Callers must hold mu.
+func (rl *rateLimiter) roll() {
+	if time.Since(rl.windowStart) > rl.window {
+		rl.counts = make(map[string]int)
+		rl.windowStart = time.Now()
+	}
 }
 
 // rateLimited wraps a handler, rejecting requests that exceed the per-IP limit.
@@ -45,6 +66,36 @@ func (s *Server) rateLimited(h http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		h(w, r)
+	}
+}
+
+// statusRecorder captures the response status code written by the wrapped handler.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (sr *statusRecorder) WriteHeader(code int) {
+	sr.status = code
+	sr.ResponseWriter.WriteHeader(code)
+}
+
+// authLimited is like rateLimited, but only FAILED attempts (4xx/5xx) consume the
+// per-IP budget. A client presenting a valid credential is never throttled — bulk
+// operations from dd-cli/dd-mcp (one token exchange per process) must not hit 429 —
+// while brute-forcing invalid tokens is still limited.
+func (s *Server) authLimited(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r)
+		if !s.loginLimiter.peek(ip) {
+			writeError(w, http.StatusTooManyRequests, "too many attempts, please try again later")
+			return
+		}
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		h(rec, r)
+		if rec.status >= 400 {
+			s.loginLimiter.record(ip)
+		}
 	}
 }
 

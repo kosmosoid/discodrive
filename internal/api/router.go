@@ -50,7 +50,7 @@ func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService,
 	mux.HandleFunc("POST /auth/mfa/totp", s.rateLimited(s.handleMFATOTP)) // finish 2FA login (carries the MFA-pending token)
 	mux.HandleFunc("POST /auth/webauthn/login/begin", s.rateLimited(s.handleWebAuthnLoginBegin))   // passwordless passkey sign-in
 	mux.HandleFunc("POST /auth/webauthn/login/finish", s.rateLimited(s.handleWebAuthnLoginFinish))
-	mux.HandleFunc("POST /auth/device/token", s.rateLimited(s.handleDeviceToken))
+	mux.HandleFunc("POST /auth/device/token", s.authLimited(s.handleDeviceToken))
 	mux.HandleFunc("GET /s/{token}", s.handleLinkDownload)  // public share link
 	mux.HandleFunc("GET /cal/{file}", s.handleCalendarFeed) // public ICS feed
 	mux.HandleFunc("POST /pair/init", s.rateLimited(s.handlePairInit))
