@@ -213,3 +213,15 @@ DiscoDrive поширюється як **source-available** за ліцензі�
 ## Хобі-проєкт
 
 DiscoDrive — це хобі-проєкт, який створює й розвиває одна людина. Відгуки та пропозиції вітаються — пишіть на [discodrive@kosmosoid.dev](mailto:discodrive@kosmosoid.dev).
+
+---
+
+## ❤️ Підтримати проєкт
+
+Якщо вам подобається DiscoDrive і ви хочете, щоб він розвивався далі, ви можете підтримати проєкт:
+
+- **[Ko-fi](https://ko-fi.com/kosmosoid)**
+- **[Boosty](https://boosty.to/kosmosoid/donate)**
+- **[Криптовалюта](https://nowpayments.io/donation?api_key=7P893T0-48B4KZH-Q6PXBBT-D79X9TK)** — через NOWPayments
+
+Дякую! Кожен внесок допомагає проєкту розвиватися.

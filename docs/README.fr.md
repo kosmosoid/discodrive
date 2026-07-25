@@ -213,3 +213,15 @@ Besoin d'un usage commercial ? Une licence commerciale distincte est disponible 
 ## Un projet de loisir
 
 DiscoDrive est un projet de loisir, conçu et maintenu par une seule personne. Les retours et suggestions sont les bienvenus — écrivez à [discodrive@kosmosoid.dev](mailto:discodrive@kosmosoid.dev).
+
+---
+
+## ❤️ Soutenir le projet
+
+Si DiscoDrive vous plaît et que vous souhaitez qu'il continue d'évoluer, vous pouvez soutenir son développement :
+
+- **[Ko-fi](https://ko-fi.com/kosmosoid)**
+- **[Boosty](https://boosty.to/kosmosoid/donate)**
+- **[Cryptomonnaie](https://nowpayments.io/donation?api_key=7P893T0-48B4KZH-Q6PXBBT-D79X9TK)** — via NOWPayments
+
+Merci ! Chaque contribution fait avancer le projet.

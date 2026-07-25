@@ -213,3 +213,15 @@ DiscoDrive es **source-available** bajo la licencia [PolyForm Noncommercial Lice
 ## Un proyecto de afición
 
 DiscoDrive es un proyecto de afición, creado y mantenido por una sola persona. Los comentarios y sugerencias son bienvenidos — escribe a [discodrive@kosmosoid.dev](mailto:discodrive@kosmosoid.dev).
+
+---
+
+## ❤️ Apoya el proyecto
+
+Si te gusta DiscoDrive y quieres que siga creciendo, puedes apoyar su desarrollo:
+
+- **[Ko-fi](https://ko-fi.com/kosmosoid)**
+- **[Boosty](https://boosty.to/kosmosoid/donate)**
+- **[Criptomonedas](https://nowpayments.io/donation?api_key=7P893T0-48B4KZH-Q6PXBBT-D79X9TK)** — a través de NOWPayments
+
+¡Gracias! Cada aportación impulsa el desarrollo del proyecto.

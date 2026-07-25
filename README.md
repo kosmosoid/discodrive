@@ -213,3 +213,15 @@ Need commercial use? A separate commercial license is available — write to [di
 ## A hobby project
 
 DiscoDrive is a hobby project, built and maintained by one person. Feedback and suggestions are welcome — write to [discodrive@kosmosoid.dev](mailto:discodrive@kosmosoid.dev).
+
+---
+
+## ❤️ Support the project
+
+If you enjoy DiscoDrive and want to see it keep growing, you can support its development:
+
+- **[Ko-fi](https://ko-fi.com/kosmosoid)**
+- **[Boosty](https://boosty.to/kosmosoid/donate)**
+- **[Cryptocurrency](https://nowpayments.io/donation?api_key=7P893T0-48B4KZH-Q6PXBBT-D79X9TK)** — via NOWPayments
+
+Thank you! Every contribution helps the project grow.
