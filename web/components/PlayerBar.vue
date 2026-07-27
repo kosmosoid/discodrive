@@ -8,9 +8,6 @@ const {
   theater, coverUrl, notice, current, currentIsVideo,
 } = player
 
-const emit = defineEmits<{ (e: 'detach'): void }>()
-const props = defineProps<{ canDetach: boolean }>()
-
 const queueOpen = ref(false)
 
 const playing = computed(() => status.value === 'playing' || status.value === 'buffering')
@@ -130,7 +127,7 @@ useModalEscape(computed(() => queueOpen.value), () => { queueOpen.value = false 
         <button class="btn-ghost px-2 py-1" :class="queueOpen ? 'text-accent' : ''" :title="t('player.queue')" @click="queueOpen = !queueOpen">
           <Icon name="lucide:list-music" size="16" />
         </button>
-        <button v-if="props.canDetach" class="btn-ghost hidden px-2 py-1 md:inline-flex" :title="t('player.detach')" @click="emit('detach')">
+        <button class="btn-ghost hidden px-2 py-1 md:inline-flex" :title="t('player.detach')" @click="player.detachToPopup()">
           <Icon name="lucide:picture-in-picture-2" size="16" />
         </button>
         <button class="btn-ghost px-2 py-1" :title="t('player.close')" @click="player.close()">

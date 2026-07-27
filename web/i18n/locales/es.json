@@ -739,6 +739,7 @@
     "collapse_video": "Ocultar vídeo",
     "unplayable": "Este navegador no puede reproducir este formato",
     "skipped_unplayable": "«{name}» omitido: formato no compatible",
-    "skipped_missing": "«{name}» omitido: archivo no disponible"
+    "skipped_missing": "«{name}» omitido: archivo no disponible",
+    "popup_blocked": "El navegador bloqueó la ventana emergente: permite las ventanas emergentes para este sitio"
   }
 }

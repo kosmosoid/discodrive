@@ -23,6 +23,13 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null
 let retriedCurrent = false // one URL-refresh retry per track (spec §5.4)
 let restored = false
 
+// Detached playback lives in a real popup window (/app/player): unlike Document
+// PiP, it survives reloads and even closing the main tab. The two windows
+// coordinate over a BroadcastChannel — exactly one of them owns playback.
+type PlayerRole = 'main' | 'popup'
+let role: PlayerRole = 'main'
+let bc: BroadcastChannel | null = null
+
 function useQueueState() {
   return {
     queue: useState<QueueTrack[]>('player.queue', () => []),
@@ -90,26 +97,41 @@ export function usePlayer() {
   }
 
   // ---- persistence ----
+  function writePersist() {
+    if (!st.queue.value.length) return
+    localStorage.setItem(PERSIST_KEY, serializePlayer({
+      parentId: st.parentId.value,
+      items: st.queue.value.map(({ playable, ...it }) => it),
+      index: st.index.value,
+      position: st.position.value,
+      volume: st.volume.value,
+      muted: st.muted.value,
+      repeat: st.repeat.value,
+      shuffle: st.shuffle.value,
+    }))
+  }
+
   function persistSoon() {
     if (!import.meta.client || persistTimer) return
     persistTimer = setTimeout(() => {
       persistTimer = null
-      if (!st.queue.value.length) return
-      localStorage.setItem(PERSIST_KEY, serializePlayer({
-        parentId: st.parentId.value,
-        items: st.queue.value.map(({ playable, ...it }) => it),
-        index: st.index.value,
-        position: st.position.value,
-        volume: st.volume.value,
-        muted: st.muted.value,
-        repeat: st.repeat.value,
-        shuffle: st.shuffle.value,
-      }))
+      writePersist()
     }, PERSIST_INTERVAL_MS)
   }
 
-  function restoreOnce() {
-    if (restored || !import.meta.client) return
+  // persistNow flushes immediately — used for the popup handoff and on pagehide,
+  // where the debounce would lose the last seconds of position.
+  function persistNow() {
+    if (!import.meta.client) return
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+    writePersist()
+  }
+
+  function restoreFromStorage(force = false) {
+    if (!import.meta.client || (restored && !force)) return
     restored = true
     const saved = restorePlayer(localStorage.getItem(PERSIST_KEY))
     if (!saved) return
@@ -127,8 +149,9 @@ export function usePlayer() {
     void updateSessionMetadata()
   }
 
-  // ---- media element wiring (called once by PlayerLayer) ----
-  function attachMedia(el: HTMLVideoElement) {
+  // ---- media element wiring (called once per window: PlayerLayer or /player) ----
+  function attachMedia(el: HTMLVideoElement, asRole: PlayerRole = 'main') {
+    role = asRole
     media = el
     el.volume = st.volume.value
     el.muted = st.muted.value
@@ -154,8 +177,38 @@ export function usePlayer() {
     el.addEventListener('ended', () => { advance(false) })
     el.addEventListener('error', () => { void handleMediaError() })
 
+    // Cross-window coordination: exactly one window owns playback.
+    if (import.meta.client && 'BroadcastChannel' in window && !bc) {
+      bc = new BroadcastChannel('dd-player')
+      bc.onmessage = (ev) => {
+        const msg = ev.data
+        if (role === 'main') {
+          // A popup announced itself (on open, or replying to our hello after a
+          // main-window reload) → the main window yields.
+          if (msg === 'popup-open') stopLocal()
+          // Popup closed → pick the state back up, paused, unless we are already
+          // playing something new (the user took over in the main window).
+          else if (msg === 'popup-closed' && st.status.value === 'idle') restoreFromStorage(true)
+        } else {
+          // Starting playback in the main window supersedes the popup.
+          if (msg === 'main-took-over') window.close()
+          else if (msg === 'main-hello') bc?.postMessage('popup-open')
+        }
+      }
+    }
+    if (role === 'popup' && import.meta.client) {
+      window.addEventListener('pagehide', () => {
+        persistNow()
+        bc?.postMessage('popup-closed')
+      })
+    }
+
     setupMediaSession()
-    restoreOnce()
+    restoreFromStorage()
+    if (import.meta.client) {
+      if (role === 'popup') bc?.postMessage('popup-open')
+      else bc?.postMessage('main-hello') // discover an already-running popup after reload
+    }
   }
 
   function showNotice(msg: string) {
@@ -174,6 +227,9 @@ export function usePlayer() {
     }
     st.duration.value = track.duration ?? 0
     st.position.value = fromPosition
+    // A video track opens the theater by itself — sound without picture is a bug,
+    // not a feature. The bar button (or Escape) collapses it back to audio-only.
+    if (isVideoMime(track.mime)) st.theater.value = true
     media.src = track.stream_url
     if (fromPosition > 0) media.currentTime = fromPosition
     try {
@@ -228,6 +284,7 @@ export function usePlayer() {
 
   // ---- public controls ----
   async function playFolder(parentId: string, clickedNodeId: string) {
+    bc?.postMessage('main-took-over') // an open popup closes: latest intent wins
     const { request } = useApi()
     const resp = await request<{ items: MediaItem[] }>(mediaEndpoint(parentId))
     const queue = buildQueue(resp.items, browserCanPlay)
@@ -301,7 +358,9 @@ export function usePlayer() {
     persistSoon()
   }
 
-  function close() {
+  // stopLocal silences THIS window without forgetting the saved state — used when
+  // the popup takes over. close() is the user's explicit X: forget everything.
+  function stopLocal() {
     if (media) {
       media.pause()
       media.removeAttribute('src')
@@ -312,7 +371,21 @@ export function usePlayer() {
     st.queue.value = []
     st.index.value = -1
     st.coverUrl.value = null
+  }
+
+  function close() {
+    stopLocal()
     if (import.meta.client) localStorage.removeItem(PERSIST_KEY)
+  }
+
+  // detachToPopup hands playback to a standalone window: unlike Document PiP it
+  // keeps playing when this tab reloads or closes. Handoff = flush state to
+  // localStorage, open /player; the popup announces itself and this window yields.
+  function detachToPopup() {
+    if (!import.meta.client) return
+    persistNow()
+    const win = window.open('/app/player', 'dd-player', 'popup=yes,width=440,height=240')
+    if (!win) showNotice(t('player.popup_blocked'))
   }
 
   // ---- Media Session (OS media keys, lock screen) ----
@@ -349,5 +422,6 @@ export function usePlayer() {
     // wiring + controls
     attachMedia, playFolder, playAt, toggle, next, prev, seek,
     setVolume, toggleMute, cycleRepeat, toggleShuffle, close,
+    detachToPopup, persistNow,
   }
 }

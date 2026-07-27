@@ -739,6 +739,7 @@
     "collapse_video": "Masquer la vidéo",
     "unplayable": "Ce navigateur ne peut pas lire ce format",
     "skipped_unplayable": "« {name} » ignoré : format non pris en charge",
-    "skipped_missing": "« {name} » ignoré : fichier indisponible"
+    "skipped_missing": "« {name} » ignoré : fichier indisponible",
+    "popup_blocked": "Le navigateur a bloqué la fenêtre du lecteur — autorisez les pop-ups pour ce site"
   }
 }

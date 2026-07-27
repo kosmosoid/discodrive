@@ -739,6 +739,7 @@
     "collapse_video": "Video ausblenden",
     "unplayable": "Dieser Browser kann dieses Format nicht abspielen",
     "skipped_unplayable": "„{name}“ übersprungen: Format nicht unterstützt",
-    "skipped_missing": "„{name}“ übersprungen: Datei nicht verfügbar"
+    "skipped_missing": "„{name}“ übersprungen: Datei nicht verfügbar",
+    "popup_blocked": "Der Browser hat das Pop-up-Fenster blockiert — Pop-ups für diese Seite erlauben"
   }
 }
