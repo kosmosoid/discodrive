@@ -289,7 +289,9 @@ async function download() {
 }
 .md-body pre code { background: none; border: none; padding: 0; font-size: 0.8rem; }
 .md-body table { border-collapse: collapse; margin: 0.8em 0; width: auto; }
-.md-body :is(th, td) { border: 1px solid rgb(var(--c-line)); padding: 0.35em 0.7em; }
+/* ink-based border, not --c-line: the line color has almost no contrast against
+   the white card in the light theme, tables looked borderless there */
+.md-body :is(th, td) { border: 1px solid rgb(var(--c-ink) / 0.2); padding: 0.35em 0.7em; }
 .md-body th { background: rgb(var(--c-panel2)); font-weight: 600; }
 .md-body hr { border: none; border-top: 1px solid rgb(var(--c-line)); margin: 1.2em 0; }
 .md-body .md-wikilink { color: rgb(var(--c-accent)); opacity: 0.8; }
