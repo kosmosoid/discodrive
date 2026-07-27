@@ -321,6 +321,9 @@ type Querier interface {
 	SoftDeleteSubtree(ctx context.Context, arg SoftDeleteSubtreeParams) error
 	// Returns accessible songs for a specific genre with pagination.
 	SongsByGenre(ctx context.Context, arg SongsByGenreParams) ([]SongsByGenreRow, error)
+	// Song metadata for the player's media listing: one query covers a whole folder,
+	// names are joined in (songs stores only artist_id/album_id).
+	SongsMetaByNodeIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]SongsMetaByNodeIDsRow, error)
 	Star(ctx context.Context, arg StarParams) error
 	StarredItems(ctx context.Context, userID pgtype.UUID) ([]StarredItemsRow, error)
 	// Returns accessible songs for a given artist name ordered by caller's play count descending.

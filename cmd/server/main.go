@@ -124,7 +124,10 @@ func securityHeaders(scriptHashes []string, next http.Handler) http.Handler {
 		scriptSrc = "script-src 'self' " + strings.Join(scriptHashes, " ")
 	}
 	// blob: in img-src — needed for in-browser preview of decrypted vault files (blob URLs).
-	csp := "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; " +
+	// media-src 'self' — the player's <audio>/<video> stream from /files/{id}/stream
+	// on our own origin; without an explicit directive media would inherit default-src,
+	// which is fine today, but the player depends on it, so it is pinned deliberately.
+	csp := "default-src 'self'; img-src 'self' data: blob:; media-src 'self'; style-src 'self' 'unsafe-inline'; " +
 		scriptSrc + "; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()

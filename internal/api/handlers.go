@@ -68,10 +68,11 @@ type nodeDTO struct {
 	IsDir   bool   `json:"is_dir"`
 	Size    *int64 `json:"size"`
 	Version int64  `json:"version"`
+	Mime    string `json:"mime,omitempty"`
 }
 
 func toNodeDTO(n db.Node) nodeDTO {
-	d := nodeDTO{ID: db.UUIDString(n.ID), Name: n.Name, IsDir: n.IsDir, Version: n.Version}
+	d := nodeDTO{ID: db.UUIDString(n.ID), Name: n.Name, IsDir: n.IsDir, Version: n.Version, Mime: n.Mime.String}
 	if n.Size.Valid {
 		s := n.Size.Int64
 		d.Size = &s
@@ -692,6 +693,12 @@ func xaccelRedirect(rel string) string {
 // streamFile serves file bytes directly (no-nginx mode): http.ServeContent handles
 // Range requests and conditional GETs. Used when XACCEL_ENABLED=false.
 func (s *Server) streamFile(w http.ResponseWriter, r *http.Request, mime pgtype.Text, name, diskPath string) {
+	s.serveFileContent(w, r, name, diskPath, func() { setDownloadHeaders(w, mime, name) })
+}
+
+// serveFileContent opens diskPath and serves it with Range support. setHeaders runs
+// only once the file is known to be readable, so error responses stay header-clean.
+func (s *Server) serveFileContent(w http.ResponseWriter, r *http.Request, name, diskPath string, setHeaders func()) {
 	abs := filepath.Join(s.storageRoot, diskPath)
 	f, err := os.Open(abs)
 	if err != nil {
@@ -704,7 +711,7 @@ func (s *Server) streamFile(w http.ResponseWriter, r *http.Request, mime pgtype.
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	setDownloadHeaders(w, mime, name)
+	setHeaders()
 	http.ServeContent(w, r, name, fi.ModTime(), f)
 }
 

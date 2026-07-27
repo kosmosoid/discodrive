@@ -19,8 +19,11 @@ type Claims struct {
 	DeviceID string `json:"did,omitempty"`
 	// Pur is the token purpose. Empty for full session tokens (back-compatible).
 	// "mfa" marks a short-lived intermediate token: password proven, second factor pending.
+	// "stream" marks a URL-carried media token scoped to a single node (Nid).
 	// The main middleware rejects any token with a non-empty purpose.
 	Pur string `json:"pur,omitempty"`
+	// Nid is set only on purpose=stream tokens: the single node the token may read.
+	Nid string `json:"nid,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -67,6 +70,29 @@ func (t *TokenIssuer) IssueMFA(userID, tenantID string) (string, error) {
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(mfaTokenTTL)),
+		},
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(t.secret)
+}
+
+// streamTokenTTL bounds how long a minted stream URL stays valid. Long enough to
+// play a full track with pauses; expired URLs are re-minted by the player via the
+// media-listing endpoint, so a short TTL costs one extra request, not a broken player.
+const streamTokenTTL = time.Hour
+
+// IssueStream issues a purpose=stream token scoped to a single node. It grants no
+// session access (the main middleware rejects non-empty purposes); only the stream
+// endpoint accepts it, and that endpoint re-checks node access on every request.
+func (t *TokenIssuer) IssueStream(userID, nodeID string, ver int64) (string, error) {
+	now := time.Now()
+	claims := Claims{
+		Ver: ver,
+		Pur: "stream",
+		Nid: nodeID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(streamTokenTTL)),
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(t.secret)

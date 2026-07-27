@@ -3269,6 +3269,57 @@ func (q *Queries) SongsByGenre(ctx context.Context, arg SongsByGenreParams) ([]S
 	return items, nil
 }
 
+const songsMetaByNodeIDs = `-- name: SongsMetaByNodeIDs :many
+SELECT s.node_id, s.title, s.track, s.disc, s.duration, s.bitrate,
+       a.name AS artist_name, al.name AS album_name
+FROM songs s
+LEFT JOIN artists a ON a.id = s.artist_id
+LEFT JOIN albums al ON al.id = s.album_id
+WHERE s.node_id = ANY($1::uuid[])
+`
+
+type SongsMetaByNodeIDsRow struct {
+	NodeID     pgtype.UUID `json:"node_id"`
+	Title      string      `json:"title"`
+	Track      pgtype.Int4 `json:"track"`
+	Disc       pgtype.Int4 `json:"disc"`
+	Duration   pgtype.Int4 `json:"duration"`
+	Bitrate    pgtype.Int4 `json:"bitrate"`
+	ArtistName pgtype.Text `json:"artist_name"`
+	AlbumName  pgtype.Text `json:"album_name"`
+}
+
+// Song metadata for the player's media listing: one query covers a whole folder,
+// names are joined in (songs stores only artist_id/album_id).
+func (q *Queries) SongsMetaByNodeIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]SongsMetaByNodeIDsRow, error) {
+	rows, err := q.db.Query(ctx, songsMetaByNodeIDs, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SongsMetaByNodeIDsRow{}
+	for rows.Next() {
+		var i SongsMetaByNodeIDsRow
+		if err := rows.Scan(
+			&i.NodeID,
+			&i.Title,
+			&i.Track,
+			&i.Disc,
+			&i.Duration,
+			&i.Bitrate,
+			&i.ArtistName,
+			&i.AlbumName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const star = `-- name: Star :exec
 INSERT INTO stars (user_id, item_id, item_type)
 VALUES ($1, $2, $3)

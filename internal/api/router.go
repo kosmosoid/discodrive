@@ -51,8 +51,9 @@ func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService,
 	mux.HandleFunc("POST /auth/webauthn/login/begin", s.rateLimited(s.handleWebAuthnLoginBegin))   // passwordless passkey sign-in
 	mux.HandleFunc("POST /auth/webauthn/login/finish", s.rateLimited(s.handleWebAuthnLoginFinish))
 	mux.HandleFunc("POST /auth/device/token", s.authLimited(s.handleDeviceToken))
-	mux.HandleFunc("GET /s/{token}", s.handleLinkDownload)  // public share link
-	mux.HandleFunc("GET /cal/{file}", s.handleCalendarFeed) // public ICS feed
+	mux.HandleFunc("GET /s/{token}", s.handleLinkDownload)       // public share link
+	mux.HandleFunc("GET /cal/{file}", s.handleCalendarFeed)      // public ICS feed
+	mux.HandleFunc("GET /files/{id}/stream", s.handleStream)     // media stream: auth = purpose=stream token in ?t=
 	mux.HandleFunc("POST /pair/init", s.rateLimited(s.handlePairInit))
 	mux.HandleFunc("POST /pair/token", s.pollLimited(s.handlePairToken))
 
@@ -74,6 +75,8 @@ func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService,
 	mux.Handle("GET /files", prot(http.HandlerFunc(s.handleListFiles)))
 	mux.Handle("GET /files/{id}", prot(http.HandlerFunc(s.handleGetFile)))
 	mux.Handle("GET /files/{id}/content", prot(http.HandlerFunc(s.handleDownload)))
+	mux.Handle("GET /files/{id}/media", prot(http.HandlerFunc(s.handleMediaListing)))
+	mux.Handle("GET /files/{id}/media-cover", prot(http.HandlerFunc(s.handleMediaCover)))
 	mux.Handle("POST /files/folder", prot(http.HandlerFunc(s.handleCreateFolder)))
 	mux.Handle("POST /files/upload", prot(http.HandlerFunc(s.handleUpload)))
 	mux.Handle("PATCH /files/{id}/rename", prot(http.HandlerFunc(s.handleRename)))

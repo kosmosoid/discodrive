@@ -870,3 +870,13 @@ SELECT * FROM bookmarks WHERE user_id = $1 ORDER BY changed_at DESC;
 
 -- name: DeleteBookmark :exec
 DELETE FROM bookmarks WHERE user_id = $1 AND item_id = $2 AND item_type = $3;
+
+-- Song metadata for the player's media listing: one query covers a whole folder,
+-- names are joined in (songs stores only artist_id/album_id).
+-- name: SongsMetaByNodeIDs :many
+SELECT s.node_id, s.title, s.track, s.disc, s.duration, s.bitrate,
+       a.name AS artist_name, al.name AS album_name
+FROM songs s
+LEFT JOIN artists a ON a.id = s.artist_id
+LEFT JOIN albums al ON al.id = s.album_id
+WHERE s.node_id = ANY($1::uuid[]);
