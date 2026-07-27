@@ -754,5 +754,18 @@
     "preset_vocal": "Vocal",
     "preset_electronic": "Electronic",
     "preset_custom": "Custom"
+  },
+  "preview": {
+    "counter": "{i} of {n}",
+    "no_preview": "No preview available for this file",
+    "too_large": "File is too large to preview (limit {max})",
+    "error": "Could not load the file",
+    "pdf_error": "Could not display this PDF",
+    "prev": "Previous file",
+    "next": "Next file",
+    "page_of": "{page} / {pages}",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out",
+    "zoom_fit": "Fit width"
   }
 }

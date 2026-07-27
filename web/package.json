@@ -11,15 +11,18 @@
   "dependencies": {
     "@github/webauthn-json": "^2.1.1",
     "@nuxtjs/i18n": "^10.4.0",
+    "highlight.js": "^11.11.1",
+    "markdown-it": "^14.3.0",
+    "pdfjs-dist": "^6.1.200",
     "qrcode": "^1.5.4",
     "scrypt-js": "^3.0.1"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.18",
-    "@types/qrcode": "^1.5.5",
     "@nuxt/icon": "^1.10.3",
     "@nuxtjs/tailwindcss": "^6.12.2",
     "@types/node": "^25.9.3",
+    "@types/qrcode": "^1.5.5",
     "nuxt": "^3.14.1592",
     "vitest": "^2.1.8"
   }

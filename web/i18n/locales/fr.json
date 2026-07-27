@@ -754,5 +754,18 @@
     "preset_vocal": "Voix",
     "preset_electronic": "Électronique",
     "preset_custom": "Personnalisé"
+  },
+  "preview": {
+    "counter": "{i} sur {n}",
+    "no_preview": "Aucun aperçu disponible pour ce fichier",
+    "too_large": "Fichier trop volumineux pour l'aperçu (limite {max})",
+    "error": "Impossible de charger le fichier",
+    "pdf_error": "Impossible d'afficher ce PDF",
+    "prev": "Fichier précédent",
+    "next": "Fichier suivant",
+    "page_of": "{page} / {pages}",
+    "zoom_in": "Zoom avant",
+    "zoom_out": "Zoom arrière",
+    "zoom_fit": "Ajuster à la largeur"
   }
 }

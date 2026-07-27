@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { naturalCompare } from '~/lib/naturalSort'
+import type { PreviewItem } from '~/lib/preview/types'
 
 interface Node { id: string; name: string; is_dir: boolean; size: number | null; version: number; mime?: string }
 
@@ -18,6 +19,26 @@ async function play(n: Node) {
   } catch (e: any) {
     error.value = e?.data?.error || t('files.error_load')
   }
+}
+
+// --- file preview ---
+// Gallery = every non-playable file of the folder in listing order; playable
+// media opens the player instead. What actually renders (or shows a "no
+// preview" placeholder) is PreviewModal's concern.
+const preview = reactive({ open: false, index: 0 })
+const previewables = computed(() => sorted.value.filter((n) => !n.is_dir && !isPlayable(n)))
+const previewItems = computed<PreviewItem[]>(() =>
+  previewables.value.map((n) => ({
+    name: n.name,
+    size: n.size,
+    load: () => request<Blob>(`/files/${n.id}/content`, { responseType: 'blob' }),
+  })),
+)
+function openPreview(n: Node) {
+  const i = previewables.value.findIndex((p) => p.id === n.id)
+  if (i < 0) return
+  preview.index = i
+  preview.open = true
 }
 
 // --- Vault browser ---
@@ -308,7 +329,12 @@ useModalEscape(computed(() => vaultOpen.value), () => { vaultOpen.value = false 
                 {{ n.name }}
                 <Icon name="lucide:play" size="12" class="opacity-0 transition group-hover/play:opacity-100" />
               </button>
-              <span v-else :class="n.mime && (n.mime.startsWith('audio/') || n.mime.startsWith('video/')) ? 'opacity-50' : ''">{{ n.name }}</span>
+              <button
+                v-else
+                class="text-left hover:underline"
+                :class="n.mime && (n.mime.startsWith('audio/') || n.mime.startsWith('video/')) ? 'opacity-50' : ''"
+                @click="openPreview(n)"
+              >{{ n.name }}</button>
             </td>
             <td class="whitespace-nowrap py-2.5 text-right text-xs text-muted">{{ n.is_dir ? '' : formatBytes(n.size) }}</td>
             <td class="py-2.5 pr-4">
@@ -412,6 +438,14 @@ useModalEscape(computed(() => vaultOpen.value), () => { vaultOpen.value = false 
         </div>
       </div>
     </div>
+    <!-- file preview -->
+    <PreviewModal
+      v-if="preview.open"
+      :items="previewItems"
+      :start-index="preview.index"
+      @close="preview.open = false"
+    />
+
     <!-- VaultBrowser -->
     <VaultBrowser
       v-if="vaultOpen"

@@ -754,5 +754,18 @@
     "preset_vocal": "Gesang",
     "preset_electronic": "Elektronisch",
     "preset_custom": "Benutzerdefiniert"
+  },
+  "preview": {
+    "counter": "{i} von {n}",
+    "no_preview": "Für diese Datei ist keine Vorschau verfügbar",
+    "too_large": "Datei ist zu groß für die Vorschau (Limit {max})",
+    "error": "Datei konnte nicht geladen werden",
+    "pdf_error": "PDF konnte nicht angezeigt werden",
+    "prev": "Vorherige Datei",
+    "next": "Nächste Datei",
+    "page_of": "{page} / {pages}",
+    "zoom_in": "Vergrößern",
+    "zoom_out": "Verkleinern",
+    "zoom_fit": "An Breite anpassen"
   }
 }

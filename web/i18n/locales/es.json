@@ -754,5 +754,18 @@
     "preset_vocal": "Vocal",
     "preset_electronic": "Electrónica",
     "preset_custom": "Personalizado"
+  },
+  "preview": {
+    "counter": "{i} de {n}",
+    "no_preview": "No hay vista previa disponible para este archivo",
+    "too_large": "El archivo es demasiado grande para la vista previa (límite {max})",
+    "error": "No se pudo cargar el archivo",
+    "pdf_error": "No se pudo mostrar el PDF",
+    "prev": "Archivo anterior",
+    "next": "Archivo siguiente",
+    "page_of": "{page} / {pages}",
+    "zoom_in": "Acercar",
+    "zoom_out": "Alejar",
+    "zoom_fit": "Ajustar al ancho"
   }
 }
