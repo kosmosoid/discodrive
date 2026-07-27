@@ -8,6 +8,11 @@ const { t } = useI18n()
 const eq = useEq()
 const { enabled, preset, gains } = eq
 
+// closable: show an in-panel X — needed where the panel covers the button that
+// opened it (the pop-out mini window).
+defineProps<{ closable?: boolean }>()
+const emit = defineEmits<{ (e: 'close'): void }>()
+
 function bandLabel(freq: number): string {
   return freq >= 1000 ? `${freq / 1000}k` : String(freq)
 }
@@ -24,17 +29,22 @@ function onPreset(e: Event) {
   <div class="w-72 select-none p-3">
     <div class="mb-2 flex items-center justify-between gap-2">
       <span class="text-sm font-medium">{{ t('player.eq') }}</span>
-      <button
-        class="relative h-5 w-9 rounded-full transition"
-        :class="enabled ? 'bg-accent' : 'bg-ink/20'"
-        :title="t('player.eq_enable')"
-        @click="eq.setEnabled(!enabled)"
-      >
-        <span
-          class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
-          :class="enabled ? 'left-[18px]' : 'left-0.5'"
-        />
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          class="relative h-5 w-9 rounded-full transition"
+          :class="enabled ? 'bg-accent' : 'bg-ink/20'"
+          :title="t('player.eq_enable')"
+          @click="eq.setEnabled(!enabled)"
+        >
+          <span
+            class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+            :class="enabled ? 'left-[18px]' : 'left-0.5'"
+          />
+        </button>
+        <button v-if="closable" class="btn-ghost px-1.5 py-1" :title="t('common.close')" @click="emit('close')">
+          <Icon name="lucide:x" size="16" />
+        </button>
+      </div>
     </div>
 
     <div class="mb-3 flex items-center gap-2">

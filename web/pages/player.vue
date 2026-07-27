@@ -31,6 +31,8 @@ watch(current, (tr) => {
   if (import.meta.client) document.title = tr ? `${tr.title || tr.name} — DiscoDrive` : 'DiscoDrive'
 }, { immediate: true })
 
+useModalEscape(computed(() => eqOpen.value), () => { eqOpen.value = false })
+
 function onSeek(e: Event) { player.seek(parseFloat((e.target as HTMLInputElement).value)) }
 function onVolume(e: Event) { player.setVolume(parseFloat((e.target as HTMLInputElement).value)) }
 </script>
@@ -72,8 +74,8 @@ function onVolume(e: Event) { player.setVolume(parseFloat((e.target as HTMLInput
         <span class="w-9 tabular-nums">{{ formatTime(duration) }}</span>
       </div>
 
-      <div v-if="eqOpen" class="absolute inset-x-2 bottom-14 z-10 rounded-xl border border-line bg-panel shadow-lg">
-        <EqPanel />
+      <div v-if="eqOpen" class="absolute inset-x-2 bottom-14 z-10 max-h-[calc(100vh-4rem)] overflow-auto rounded-xl border border-line bg-panel shadow-lg">
+        <EqPanel closable @close="eqOpen = false" />
       </div>
 
       <div class="flex items-center justify-between">
