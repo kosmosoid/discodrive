@@ -19,3 +19,5 @@ web/dist/*
 deploy/nginx/certs/
 
 /.gstack/
+
+/.local/
