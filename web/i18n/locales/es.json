@@ -491,9 +491,7 @@
     "rate_limit": "Demasiados intentos incorrectos. Por favor espere",
     "error_wrong_password": "Contraseña incorrecta",
     "error_unlock": "Error al desbloquear",
-    "security_note": "El descifrado se realiza en el navegador. Para mayor seguridad, use el cliente nativo — el web confía en el código que sirve el servidor.",
-    "decrypting": "Descifrando…",
-    "binary_no_preview": "Archivo binario — vista previa no disponible"
+    "security_note": "El descifrado se realiza en el navegador. Para mayor seguridad, use el cliente nativo — el web confía en el código que sirve el servidor."
   },
   "uploads": {
     "title": "Subidas",

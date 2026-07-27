@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { Node } from '~/composables/useVault'
+import type { Node, VaultEntry } from '~/composables/useVault'
+import type { PreviewItem } from '~/lib/preview/types'
 import { WrongPasswordError } from '~/lib/cryptomator/index.js'
 
 const props = defineProps<{ folder: Node }>()
@@ -64,65 +65,25 @@ async function doUnlock() {
 }
 
 // --- file preview ---
-const preview = reactive({
-  open: false, name: '', text: null as string | null,
-  imgUrl: null as string | null, blobUrl: null as string | null,
-  error: '', busy: false,
-})
+// The shared PreviewModal works on bytes; here the source is decrypted vault
+// content, so files stay a fully client-side path (no plaintext leaves memory).
+// Vault entries carry no plaintext size, so the text cap can't apply (size: null).
+const preview = reactive({ open: false, index: 0 })
+const previewFiles = computed(() => entries.value.filter((e) => !e.isDir))
+const previewItems = computed<PreviewItem[]>(() =>
+  previewFiles.value.map((e) => ({
+    name: e.name,
+    size: null,
+    load: async () => new Blob([(await vault.openFile(e)).bytes as BlobPart]),
+  })),
+)
 
-const imageExts = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'])
-
-function extOf(name: string): string {
-  const i = name.lastIndexOf('.')
-  return i >= 0 ? name.slice(i + 1).toLowerCase() : ''
-}
-
-function mimeByExt(name: string): string {
-  const ext = extOf(name)
-  const map: Record<string, string> = {
-    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-    gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
-  }
-  return map[ext] ?? 'application/octet-stream'
-}
-
-function closePreview() {
-  if (preview.blobUrl) URL.revokeObjectURL(preview.blobUrl)
-  Object.assign(preview, { open: false, name: '', text: null, imgUrl: null, blobUrl: null, error: '', busy: false })
-}
-
-async function openEntry(entry: (typeof entries.value)[0]) {
+async function openEntry(entry: VaultEntry) {
   if (entry.isDir) { await enter(entry); return }
-  preview.busy = true; preview.open = true; preview.name = entry.name
-  preview.text = null; preview.imgUrl = null; preview.blobUrl = null; preview.error = ''
-  try {
-    const result = await vault.openFile(entry)
-    const ext = extOf(result.name)
-    if (imageExts.has(ext)) {
-      const blob = new Blob([result.bytes as BlobPart], { type: mimeByExt(result.name) })
-      const url = URL.createObjectURL(blob)
-      preview.blobUrl = url; preview.imgUrl = url
-    } else {
-      try {
-        preview.text = new TextDecoder('utf-8', { fatal: true }).decode(result.bytes)
-        const blob = new Blob([result.bytes as BlobPart], { type: 'text/plain' })
-        preview.blobUrl = URL.createObjectURL(blob)
-      } catch {
-        const blob = new Blob([result.bytes as BlobPart], { type: 'application/octet-stream' })
-        preview.blobUrl = URL.createObjectURL(blob)
-      }
-    }
-  } catch (e: any) {
-    preview.error = e?.message || t('vault.error_unlock')
-  } finally {
-    preview.busy = false
-  }
-}
-
-function downloadPreview() {
-  if (!preview.blobUrl) return
-  const a = document.createElement('a')
-  a.href = preview.blobUrl; a.download = preview.name; a.click()
+  const i = previewFiles.value.indexOf(entry)
+  if (i < 0) return
+  preview.index = i
+  preview.open = true
 }
 
 function doLock() { lock() }
@@ -130,7 +91,9 @@ function doLock() { lock() }
 const isUnlockOpen = computed(() => !keys.value)
 const isPreviewOpen = computed(() => preview.open)
 
-useModalEscape(isPreviewOpen, closePreview)
+// The outer vault modal must NOT close on Escape while the preview is open —
+// PreviewModal handles that Escape itself (its listener is registered later,
+// so these guards still see the preview as open for the same key press).
 useModalEscape(computed(() => isUnlockOpen.value && !isPreviewOpen.value), () => emit('close'))
 useModalEscape(computed(() => !!keys.value && !isPreviewOpen.value), () => emit('close'))
 </script>
@@ -244,54 +207,11 @@ useModalEscape(computed(() => !!keys.value && !isPreviewOpen.value), () => emit(
     </div>
   </div>
 
-  <!-- FILE PREVIEW -->
-  <div
+  <!-- FILE PREVIEW (shared modal, fed with decrypted bytes) -->
+  <PreviewModal
     v-if="preview.open"
-    class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4"
-    @click.self="closePreview"
-  >
-    <div class="card flex w-full max-w-3xl flex-col" style="max-height: 90vh">
-      <div class="flex items-center justify-between border-b border-line px-5 py-3.5">
-        <span class="truncate font-medium text-sm pr-4">{{ preview.name }}</span>
-        <div class="flex shrink-0 items-center gap-1">
-          <button v-if="preview.blobUrl" class="btn-accent px-2 py-1 text-xs" @click="downloadPreview">
-            <Icon name="lucide:download" size="15" />
-            {{ t('common.download') }}
-          </button>
-          <button class="btn-ghost px-1.5 py-1" @click="closePreview">
-            <Icon name="lucide:x" size="18" />
-          </button>
-        </div>
-      </div>
-
-      <div class="overflow-auto p-4">
-        <div v-if="preview.busy" class="py-10 text-center text-sm text-muted">
-          <Icon name="lucide:loader-circle" class="animate-spin mx-auto mb-2 block" size="28" />
-          {{ t('vault.decrypting') }}
-        </div>
-
-        <p v-else-if="preview.error" class="text-sm text-danger">
-          <Icon name="lucide:triangle-alert" size="15" class="mr-1 inline" />
-          {{ preview.error }}
-        </p>
-
-        <img
-          v-else-if="preview.imgUrl"
-          :src="preview.imgUrl"
-          class="mx-auto max-w-full rounded"
-          :alt="preview.name"
-        />
-
-        <pre
-          v-else-if="preview.text !== null"
-          class="whitespace-pre-wrap break-words font-mono text-xs text-ink leading-relaxed"
-        >{{ preview.text }}</pre>
-
-        <div v-else-if="preview.blobUrl" class="py-10 text-center">
-          <Icon name="lucide:file-question" size="32" class="mx-auto mb-3 block text-muted/60" />
-          <p class="text-sm text-muted">{{ t('vault.binary_no_preview') }}</p>
-        </div>
-      </div>
-    </div>
-  </div>
+    :items="previewItems"
+    :start-index="preview.index"
+    @close="preview.open = false"
+  />
 </template>

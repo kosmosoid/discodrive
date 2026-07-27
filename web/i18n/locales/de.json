@@ -491,9 +491,7 @@
     "rate_limit": "Zu viele Fehlversuche. Bitte warten Sie",
     "error_wrong_password": "Falsches Passwort",
     "error_unlock": "Entsperrfehler",
-    "security_note": "Die Entschlüsselung erfolgt im Browser. Für maximale Sicherheit nutzen Sie den nativen Client — die Web-Oberfläche vertraut dem vom Server gelieferten Code.",
-    "decrypting": "Wird entschlüsselt…",
-    "binary_no_preview": "Binärdatei — keine Vorschau verfügbar"
+    "security_note": "Die Entschlüsselung erfolgt im Browser. Für maximale Sicherheit nutzen Sie den nativen Client — die Web-Oberfläche vertraut dem vom Server gelieferten Code."
   },
   "uploads": {
     "title": "Uploads",

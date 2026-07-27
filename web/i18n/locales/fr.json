@@ -491,9 +491,7 @@
     "rate_limit": "Trop de tentatives incorrectes. Veuillez patienter",
     "error_wrong_password": "Mot de passe incorrect",
     "error_unlock": "Erreur de déverrouillage",
-    "security_note": "Le déchiffrement est effectué dans le navigateur. Pour une sécurité maximale, utilisez le client natif — le web fait confiance au code servi par le serveur.",
-    "decrypting": "Déchiffrement…",
-    "binary_no_preview": "Fichier binaire — aperçu non disponible"
+    "security_note": "Le déchiffrement est effectué dans le navigateur. Pour une sécurité maximale, utilisez le client natif — le web fait confiance au code servi par le serveur."
   },
   "uploads": {
     "title": "Envois",

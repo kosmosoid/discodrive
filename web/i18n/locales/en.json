@@ -491,9 +491,7 @@
     "rate_limit": "Too many wrong attempts. Please wait",
     "error_wrong_password": "Wrong password",
     "error_unlock": "Unlock error",
-    "security_note": "Decryption is performed in the browser. For maximum security, use the native client — the web trusts code served by the server.",
-    "decrypting": "Decrypting…",
-    "binary_no_preview": "Binary file — preview not available"
+    "security_note": "Decryption is performed in the browser. For maximum security, use the native client — the web trusts code served by the server."
   },
   "uploads": {
     "title": "Uploads",
