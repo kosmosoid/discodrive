@@ -92,7 +92,8 @@
     "share_download_link": "Download-Link:",
     "share_create_link": "Link erstellen",
     "share_grant_access": "Zugriff gewähren",
-    "and_contents": "und alles darin"
+    "and_contents": "und alles darin",
+    "btn_play": "Abspielen"
   },
   "trash": {
     "title": "Papierkorb",
@@ -719,5 +720,25 @@
   },
   "books": {
     "edit_metadata": "Metadaten bearbeiten"
+  },
+  "player": {
+    "play": "Abspielen",
+    "pause": "Pause",
+    "next": "Weiter",
+    "prev": "Zurück",
+    "queue": "Warteschlange",
+    "repeat": "Wiederholen",
+    "shuffle": "Zufallswiedergabe",
+    "mute": "Stummschalten",
+    "unmute": "Ton ein",
+    "detach": "Player abdocken",
+    "close": "Player schließen",
+    "pip": "Bild-in-Bild",
+    "fullscreen": "Vollbild",
+    "expand_video": "Video anzeigen",
+    "collapse_video": "Video ausblenden",
+    "unplayable": "Dieser Browser kann dieses Format nicht abspielen",
+    "skipped_unplayable": "„{name}“ übersprungen: Format nicht unterstützt",
+    "skipped_missing": "„{name}“ übersprungen: Datei nicht verfügbar"
   }
 }

@@ -8,6 +8,16 @@ export function formatBytes(n: number | null | undefined): string {
   return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
+// Playback time: seconds → "m:ss" / "h:mm:ss".
+export function formatTime(sec: number | null | undefined): string {
+  if (sec == null || !Number.isFinite(sec) || sec < 0) return '0:00'
+  const s = Math.floor(sec % 60)
+  const m = Math.floor((sec / 60) % 60)
+  const h = Math.floor(sec / 3600)
+  const mm = h > 0 ? String(m).padStart(2, '0') : String(m)
+  return `${h > 0 ? h + ':' : ''}${mm}:${String(s).padStart(2, '0')}`
+}
+
 // GB ↔ bytes conversion for quota fields (empty = no limit).
 export function gbToBytes(gb: string): number | null {
   const v = parseFloat(gb)

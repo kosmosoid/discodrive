@@ -119,6 +119,7 @@ async function logout() {
           <slot />
         </div>
       </main>
+      <PlayerLayer />
     </div>
   </div>
 </template>

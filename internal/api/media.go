@@ -37,7 +37,8 @@ type mediaItemDTO struct {
 
 // GET /files/{id}/media — the player's view of a folder: playable files only
 // (media mime, not a dir, not an encrypted vault entry), each with a stream URL.
-// GET /files/{id}/media?node_id=X — a single child of that folder: used to refresh
+// GET /files/media — the same for the root of the user's own tree (no node id).
+// The ?node_id=X variant returns a single child of that folder: used to refresh
 // an expired stream URL and to lazily read tags of non-indexed files; this variant
 // also serves as the player's error probe (alive → new URL, 404 → skip the track).
 func (s *Server) handleMediaListing(w http.ResponseWriter, r *http.Request) {
@@ -51,11 +52,18 @@ func (s *Server) handleMediaListing(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if nodeID := r.URL.Query().Get("node_id"); nodeID != "" {
+		// Root children have no parent: UUIDString of a NULL parent_id is "",
+		// so the containment check in mediaSingle holds for both variants.
 		s.mediaSingle(w, r, userID, parentID, nodeID, mint)
 		return
 	}
 
-	children, err := s.files.ListChildren(r.Context(), userID, parentID)
+	var children []db.Node
+	if parentID == "" {
+		children, err = s.files.RootChildren(r.Context(), userID)
+	} else {
+		children, err = s.files.ListChildren(r.Context(), userID, parentID)
+	}
 	if err != nil {
 		writeStorageErr(w, err)
 		return

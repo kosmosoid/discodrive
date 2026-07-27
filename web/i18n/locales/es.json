@@ -92,7 +92,8 @@
     "share_download_link": "Enlace de descarga:",
     "share_create_link": "Crear enlace",
     "share_grant_access": "Conceder acceso",
-    "and_contents": "y todo lo que contiene"
+    "and_contents": "y todo lo que contiene",
+    "btn_play": "Reproducir"
   },
   "trash": {
     "title": "Papelera",
@@ -719,5 +720,25 @@
   },
   "books": {
     "edit_metadata": "Editar metadatos"
+  },
+  "player": {
+    "play": "Reproducir",
+    "pause": "Pausa",
+    "next": "Siguiente",
+    "prev": "Anterior",
+    "queue": "Cola",
+    "repeat": "Repetir",
+    "shuffle": "Aleatorio",
+    "mute": "Silenciar",
+    "unmute": "Activar sonido",
+    "detach": "Desacoplar reproductor",
+    "close": "Cerrar reproductor",
+    "pip": "Imagen en imagen",
+    "fullscreen": "Pantalla completa",
+    "expand_video": "Mostrar vídeo",
+    "collapse_video": "Ocultar vídeo",
+    "unplayable": "Este navegador no puede reproducir este formato",
+    "skipped_unplayable": "«{name}» omitido: formato no compatible",
+    "skipped_missing": "«{name}» omitido: archivo no disponible"
   }
 }

@@ -13,6 +13,7 @@ import (
 var streamableMime = map[string]bool{
 	"audio/mpeg":       true,
 	"audio/mp4":        true,
+	"audio/mp4a-latm":  true, // what Go's mime.TypeByExtension returns for .m4a (see storage.detectMime)
 	"audio/x-m4a":      true,
 	"audio/aac":        true,
 	"audio/flac":       true,

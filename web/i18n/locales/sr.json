@@ -92,7 +92,8 @@
     "share_download_link": "Веза за преузимање:",
     "share_create_link": "Направи везу",
     "share_grant_access": "Додели приступ",
-    "and_contents": "и све унутра"
+    "and_contents": "и све унутра",
+    "btn_play": "Пусти"
   },
   "trash": {
     "title": "Корпа",
@@ -719,5 +720,25 @@
   },
   "books": {
     "edit_metadata": "Уреди метаподатке"
+  },
+  "player": {
+    "play": "Пусти",
+    "pause": "Пауза",
+    "next": "Следећа",
+    "prev": "Претходна",
+    "queue": "Ред",
+    "repeat": "Понављање",
+    "shuffle": "Насумично",
+    "mute": "Искључи звук",
+    "unmute": "Укључи звук",
+    "detach": "Откачи плејер",
+    "close": "Затвори плејер",
+    "pip": "Слика у слици",
+    "fullscreen": "Цео екран",
+    "expand_video": "Прикажи видео",
+    "collapse_video": "Сакриј видео",
+    "unplayable": "Прегледач не може да репродукује овај формат",
+    "skipped_unplayable": "„{name}“ прескочено: формат није подржан",
+    "skipped_missing": "„{name}“ прескочено: датотека није доступна"
   }
 }

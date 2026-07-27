@@ -75,6 +75,7 @@ func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService,
 	mux.Handle("GET /files", prot(http.HandlerFunc(s.handleListFiles)))
 	mux.Handle("GET /files/{id}", prot(http.HandlerFunc(s.handleGetFile)))
 	mux.Handle("GET /files/{id}/content", prot(http.HandlerFunc(s.handleDownload)))
+	mux.Handle("GET /files/media", prot(http.HandlerFunc(s.handleMediaListing))) // root variant: no node id
 	mux.Handle("GET /files/{id}/media", prot(http.HandlerFunc(s.handleMediaListing)))
 	mux.Handle("GET /files/{id}/media-cover", prot(http.HandlerFunc(s.handleMediaCover)))
 	mux.Handle("POST /files/folder", prot(http.HandlerFunc(s.handleCreateFolder)))

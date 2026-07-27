@@ -232,6 +232,43 @@ func TestMediaSingleNode(t *testing.T) {
 	}
 }
 
+// TestMediaListingRoot: files living at the root of the tree (no parent node)
+// are playable too — the root variant has no {id} path segment.
+func TestMediaListingRoot(t *testing.T) {
+	e := buildStreamEnv(t, "mediaroot@x.test")
+	tok := e.login(t, "mediaroot@x.test")
+
+	rel := e.userID + "/loose.mp3"
+	if err := os.WriteFile(filepath.Join(e.root, rel), []byte("rootbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loose, err := e.q.CreateNode(e.ctx, db.CreateNodeParams{
+		UserID: e.user.ID, Name: "loose.mp3", IsDir: false,
+		DiskPath: pgtype.Text{String: rel, Valid: true},
+		Mime:     pgtype.Text{String: "audio/mpeg", Valid: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := e.mediaReq(t, tok, "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("root listing: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp mediaListingResp
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Items) != 1 || resp.Items[0].NodeID != db.UUIDString(loose.ID) {
+		t.Fatalf("root items: %s", rec.Body.String())
+	}
+	// Single-node refresh works at root as well (parent "" == NULL parent).
+	rec = e.mediaReq(t, tok, "", "?node_id="+db.UUIDString(loose.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("root single: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 // tinyPNG is a valid 1x1 PNG, enough for cover round-trips.
 var tinyPNG = []byte{
 	0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a,

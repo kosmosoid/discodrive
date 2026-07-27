@@ -92,7 +92,8 @@
     "share_download_link": "Ссылка для скачивания:",
     "share_create_link": "Создать ссылку",
     "share_grant_access": "Выдать доступ",
-    "and_contents": "и всё внутри"
+    "and_contents": "и всё внутри",
+    "btn_play": "Играть"
   },
   "trash": {
     "title": "Корзина",
@@ -719,5 +720,25 @@
   },
   "books": {
     "edit_metadata": "Редактировать метаданные"
+  },
+  "player": {
+    "play": "Играть",
+    "pause": "Пауза",
+    "next": "Следующий",
+    "prev": "Предыдущий",
+    "queue": "Очередь",
+    "repeat": "Повтор",
+    "shuffle": "Перемешать",
+    "mute": "Без звука",
+    "unmute": "Включить звук",
+    "detach": "Открепить плеер",
+    "close": "Закрыть плеер",
+    "pip": "Картинка в картинке",
+    "fullscreen": "Во весь экран",
+    "expand_video": "Показать видео",
+    "collapse_video": "Скрыть видео",
+    "unplayable": "Браузер не воспроизводит этот формат",
+    "skipped_unplayable": "«{name}» пропущен: формат не поддерживается",
+    "skipped_missing": "«{name}» пропущен: файл недоступен"
   }
 }

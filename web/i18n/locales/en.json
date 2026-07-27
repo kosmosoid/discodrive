@@ -92,7 +92,8 @@
     "share_download_link": "Download link:",
     "share_create_link": "Create link",
     "share_grant_access": "Grant access",
-    "and_contents": "and everything inside"
+    "and_contents": "and everything inside",
+    "btn_play": "Play"
   },
   "trash": {
     "title": "Trash",
@@ -719,5 +720,25 @@
     "bulk_done": "Done — {updated} of {affected} book(s) updated",
     "bulk_failed": "Could not update:",
     "list_empty": "No books found"
+  },
+  "player": {
+    "play": "Play",
+    "pause": "Pause",
+    "next": "Next",
+    "prev": "Previous",
+    "queue": "Queue",
+    "repeat": "Repeat",
+    "shuffle": "Shuffle",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "detach": "Pop out player",
+    "close": "Close player",
+    "pip": "Picture-in-picture",
+    "fullscreen": "Fullscreen",
+    "expand_video": "Show video",
+    "collapse_video": "Hide video",
+    "unplayable": "This browser cannot play this format",
+    "skipped_unplayable": "Skipped “{name}”: format not supported",
+    "skipped_missing": "Skipped “{name}”: file unavailable"
   }
 }

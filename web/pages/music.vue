@@ -1,5 +1,5 @@
 <script setup lang="ts">
-interface FsNode { id: string; name: string; is_dir: boolean; size: number | null; version: number }
+interface FsNode { id: string; name: string; is_dir: boolean; size: number | null; version: number; mime?: string }
 
 const { t } = useI18n()
 const { request } = useApi()
@@ -28,7 +28,9 @@ async function rescan() {
 }
 
 // --- Inline file tree ---
-const AUDIO_RE = /\.(mp3|flac|m4a|ogg)$/i
+// Audio detection comes from the server-side mime in nodeDTO — the single
+// source of truth shared with the player (no client-side extension regexes).
+const isAudioNode = (n: FsNode) => !!n.mime && n.mime.startsWith('audio/')
 
 interface TreeNode extends FsNode { children?: TreeNode[] | null; expanded?: boolean; loading?: boolean }
 
@@ -38,7 +40,7 @@ const treeBusy = ref(false)
 async function loadChildren(parentId: string): Promise<TreeNode[]> {
   const nodes = await request<FsNode[]>(`/files?parent_id=${parentId}`)
   return nodes
-    .filter((n) => n.is_dir || AUDIO_RE.test(n.name))
+    .filter((n) => n.is_dir || isAudioNode(n))
     .sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || a.name.localeCompare(b.name))
     .map((n) => ({ ...n, children: n.is_dir ? null : undefined, expanded: false, loading: false }))
 }

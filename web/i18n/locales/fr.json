@@ -92,7 +92,8 @@
     "share_download_link": "Lien de téléchargement :",
     "share_create_link": "Créer le lien",
     "share_grant_access": "Accorder l'accès",
-    "and_contents": "et tout ce qu'il contient"
+    "and_contents": "et tout ce qu'il contient",
+    "btn_play": "Lire"
   },
   "trash": {
     "title": "Corbeille",
@@ -719,5 +720,25 @@
   },
   "books": {
     "edit_metadata": "Modifier les métadonnées"
+  },
+  "player": {
+    "play": "Lecture",
+    "pause": "Pause",
+    "next": "Suivant",
+    "prev": "Précédent",
+    "queue": "File d’attente",
+    "repeat": "Répéter",
+    "shuffle": "Aléatoire",
+    "mute": "Couper le son",
+    "unmute": "Rétablir le son",
+    "detach": "Détacher le lecteur",
+    "close": "Fermer le lecteur",
+    "pip": "Image dans l’image",
+    "fullscreen": "Plein écran",
+    "expand_video": "Afficher la vidéo",
+    "collapse_video": "Masquer la vidéo",
+    "unplayable": "Ce navigateur ne peut pas lire ce format",
+    "skipped_unplayable": "« {name} » ignoré : format non pris en charge",
+    "skipped_missing": "« {name} » ignoré : fichier indisponible"
   }
 }

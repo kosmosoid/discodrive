@@ -1,7 +1,24 @@
 <script setup lang="ts">
-interface Node { id: string; name: string; is_dir: boolean; size: number | null; version: number }
+import { naturalCompare } from '~/lib/naturalSort'
+
+interface Node { id: string; name: string; is_dir: boolean; size: number | null; version: number; mime?: string }
 
 const { t } = useI18n()
+
+// --- player ---
+const player = usePlayer()
+// Playable = the stream endpoint will serve it AND this browser can decode it.
+// Non-decodable media stays a plain file row (download still works).
+function isPlayable(n: Node): boolean {
+  return !n.is_dir && !!n.mime && browserCanPlay(n.mime)
+}
+async function play(n: Node) {
+  try {
+    await player.playFolder(parentId.value, n.id)
+  } catch (e: any) {
+    error.value = e?.data?.error || t('files.error_load')
+  }
+}
 
 // --- Vault browser ---
 const { isVaultListing } = useVault()
@@ -49,8 +66,11 @@ const parentId = computed(() => stack.value[stack.value.length - 1].id)
 const fileInput = ref<HTMLInputElement>()
 const newFolder = ref('')
 
+// Natural sort ("2" before "10") — MUST match the player queue's comparator:
+// the queue is a snapshot of this listing, and click-to-play order relies on
+// the two lists agreeing (see lib/naturalSort.ts).
 const sorted = computed(() =>
-  [...nodes.value].sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || a.name.localeCompare(b.name)),
+  [...nodes.value].sort((a, b) => Number(b.is_dir) - Number(a.is_dir) || naturalCompare(a.name, b.name)),
 )
 
 async function load() {
@@ -279,7 +299,16 @@ useModalEscape(computed(() => vaultOpen.value), () => { vaultOpen.value = false 
             </td>
             <td class="py-2.5">
               <button v-if="n.is_dir" class="hover:underline" @click="open(n)">{{ n.name }}</button>
-              <span v-else>{{ n.name }}</span>
+              <button
+                v-else-if="isPlayable(n)"
+                class="group/play inline-flex items-center gap-1.5 hover:text-accent hover:underline"
+                :title="t('files.btn_play')"
+                @click="play(n)"
+              >
+                {{ n.name }}
+                <Icon name="lucide:play" size="12" class="opacity-0 transition group-hover/play:opacity-100" />
+              </button>
+              <span v-else :class="n.mime && (n.mime.startsWith('audio/') || n.mime.startsWith('video/')) ? 'opacity-50' : ''">{{ n.name }}</span>
             </td>
             <td class="whitespace-nowrap py-2.5 text-right text-xs text-muted">{{ n.is_dir ? '' : formatBytes(n.size) }}</td>
             <td class="py-2.5 pr-4">
