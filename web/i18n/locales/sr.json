@@ -764,6 +764,7 @@
     "page_of": "{page} / {pages}",
     "zoom_in": "Увећај",
     "zoom_out": "Умањи",
-    "zoom_fit": "По ширини"
+    "zoom_fit": "По ширини",
+    "truncated": "Приказано првих {rows} редова × {cols} колона"
   }
 }

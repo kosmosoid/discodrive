@@ -7,6 +7,7 @@ import type { PreviewItem } from '~/lib/preview/types'
 import { previewPlan, decodeUtf8Strict, TEXT_PREVIEW_MAX, type PreviewKind } from '~/lib/preview/kind'
 import { renderMarkdown } from '~/lib/preview/markdown'
 import { highlightCode } from '~/lib/preview/highlight'
+import { renderDocx } from '~/lib/preview/docx'
 
 const props = defineProps<{ items: PreviewItem[]; startIndex: number }>()
 const emit = defineEmits<{ close: [] }>()
@@ -25,9 +26,12 @@ const st = reactive({
   text: null as string | null, // plain text (no grammar / probe success)
   codeHtml: null as string | null, // highlighted source (v-html, escaped by hljs)
   mdHtml: null as string | null, // rendered markdown (v-html, html:false)
+  docxHtml: null as string | null, // mammoth output (v-html, DOMPurify-sanitized)
   imgUrl: null as string | null,
   pdfBlob: null as Blob | null,
+  sheetBlob: null as Blob | null,
   blob: null as Blob | null, // downloaded bytes, reused by the download button
+  capBytes: TEXT_PREVIEW_MAX, // the exceeded cap for the too_large placeholder
 })
 
 let objectUrl: string | null = null
@@ -48,11 +52,13 @@ async function show(i: number) {
   revoke()
   Object.assign(st, {
     busy: false, error: false, kind: 'none' as PreviewKind,
-    text: null, codeHtml: null, mdHtml: null, imgUrl: null, pdfBlob: null, blob: null,
+    text: null, codeHtml: null, mdHtml: null, docxHtml: null, imgUrl: null,
+    pdfBlob: null, sheetBlob: null, blob: null, capBytes: TEXT_PREVIEW_MAX,
   })
 
   const plan = previewPlan(item.name, item.size)
   st.kind = plan.kind
+  if (plan.max) st.capBytes = plan.max
   // both placeholders are decided from n.size — not a single byte is downloaded
   if (plan.kind === 'too_large' || plan.kind === 'none') return
 
@@ -70,6 +76,14 @@ async function show(i: number) {
       case 'pdf':
         st.pdfBlob = blob
         break
+      case 'xlsx':
+        st.sheetBlob = blob
+        break
+      case 'docx': {
+        const html = await renderDocx(await blob.arrayBuffer())
+        if (seq === loadSeq) st.docxHtml = html
+        break
+      }
       case 'markdown': {
         const html = await renderMarkdown(await blob.text())
         if (seq === loadSeq) st.mdHtml = html
@@ -214,8 +228,13 @@ async function download() {
 
         <PreviewPdf v-else-if="st.pdfBlob" :key="index" :blob="st.pdfBlob" class="absolute inset-0" />
 
+        <PreviewSheet v-else-if="st.sheetBlob" :key="'s' + index" :blob="st.sheetBlob" />
+
         <!-- rendered markdown: html:false in the renderer, safe for v-html -->
         <div v-else-if="st.mdHtml" class="md-body p-4 sm:p-6" v-html="st.mdHtml" />
+
+        <!-- docx: mammoth output sanitized by DOMPurify (lib/preview/docx.ts) -->
+        <div v-else-if="st.docxHtml" class="md-body p-4 sm:p-6" v-html="st.docxHtml" />
 
         <!-- highlighted source: hljs escapes, safe for v-html -->
         <pre
@@ -230,7 +249,7 @@ async function download() {
 
         <div v-else-if="st.kind === 'too_large'" class="py-14 text-center">
           <Icon name="lucide:file-warning" size="32" class="mx-auto mb-3 block text-muted/60" />
-          <p class="text-sm text-muted">{{ t('preview.too_large', { max: formatBytes(TEXT_PREVIEW_MAX) }) }}</p>
+          <p class="text-sm text-muted">{{ t('preview.too_large', { max: formatBytes(st.capBytes) }) }}</p>
         </div>
 
         <div v-else class="py-14 text-center">

@@ -10,8 +10,10 @@ export type PreviewKind =
   | 'markdown' // markdown-it render
   | 'pdf' // pdf.js canvas + text layer
   | 'code' // <pre> + optional highlight.js language
+  | 'docx' // mammoth → sanitized HTML
+  | 'xlsx' // SheetJS → our own table (also .xls/.ods)
   | 'probe' // unknown: download and strict-UTF-8 probe, text on success
-  | 'too_large' // known-text over the cap: don't download, offer download instead
+  | 'too_large' // known type over its cap: don't download, offer download instead
   | 'none' // no preview: placeholder with a download button
 
 export interface PreviewPlan {
@@ -20,11 +22,16 @@ export interface PreviewPlan {
   lang?: string | null
   // blob mime override for 'image' (SVG needs image/svg+xml to render in <img>)
   mime?: string
+  // for 'too_large': the cap that was exceeded, for the placeholder message
+  max?: number
 }
 
 // Parsing/highlighting multi-megabyte files hangs the tab; beyond the cap the
 // modal shows a "too large" placeholder without downloading a single byte.
 export const TEXT_PREVIEW_MAX = 2 * 1024 * 1024
+// Office documents tolerate a higher cap: they're zip-compressed and the
+// renderers slice output (sheet rows are truncated) instead of dumping it all.
+export const OFFICE_PREVIEW_MAX = 20 * 1024 * 1024
 
 export function extOf(name: string): string {
   const i = name.lastIndexOf('.')
@@ -85,17 +92,24 @@ const BASENAME_LANG: Record<string, string | null> = {
 export function previewPlan(name: string, size: number | null): PreviewPlan {
   const ext = extOf(name)
   const overCap = size != null && size > TEXT_PREVIEW_MAX
+  const overOfficeCap = size != null && size > OFFICE_PREVIEW_MAX
 
   const mime = IMAGE_MIME[ext]
   if (mime) return { kind: 'image', mime }
   if (ext === 'pdf') return { kind: 'pdf' }
   if (ext === 'md' || ext === 'markdown') {
-    return overCap ? { kind: 'too_large' } : { kind: 'markdown' }
+    return overCap ? { kind: 'too_large', max: TEXT_PREVIEW_MAX } : { kind: 'markdown' }
+  }
+  if (ext === 'docx') {
+    return overOfficeCap ? { kind: 'too_large', max: OFFICE_PREVIEW_MAX } : { kind: 'docx' }
+  }
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'ods') {
+    return overOfficeCap ? { kind: 'too_large', max: OFFICE_PREVIEW_MAX } : { kind: 'xlsx' }
   }
 
   const lang = ext ? EXT_LANG[ext] : BASENAME_LANG[name.toLowerCase()]
   if (lang !== undefined) {
-    return overCap ? { kind: 'too_large' } : { kind: 'code', lang }
+    return overCap ? { kind: 'too_large', max: TEXT_PREVIEW_MAX } : { kind: 'code', lang }
   }
 
   // Unknown extension: worth a strict-UTF-8 probe (Makefile-style files with odd

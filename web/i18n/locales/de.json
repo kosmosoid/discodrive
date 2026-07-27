@@ -764,6 +764,7 @@
     "page_of": "{page} / {pages}",
     "zoom_in": "Vergrößern",
     "zoom_out": "Verkleinern",
-    "zoom_fit": "An Breite anpassen"
+    "zoom_fit": "An Breite anpassen",
+    "truncated": "Nur die ersten {rows} × {cols} Zellen werden angezeigt"
   }
 }

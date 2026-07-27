@@ -764,6 +764,7 @@
     "page_of": "{page} / {pages}",
     "zoom_in": "Крупнее",
     "zoom_out": "Мельче",
-    "zoom_fit": "По ширине"
+    "zoom_fit": "По ширине",
+    "truncated": "Показаны первые {rows} строк × {cols} столбцов"
   }
 }

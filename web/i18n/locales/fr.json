@@ -764,6 +764,7 @@
     "page_of": "{page} / {pages}",
     "zoom_in": "Zoom avant",
     "zoom_out": "Zoom arrière",
-    "zoom_fit": "Ajuster à la largeur"
+    "zoom_fit": "Ajuster à la largeur",
+    "truncated": "Affichage des {rows} premières lignes × {cols} colonnes"
   }
 }

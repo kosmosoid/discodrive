@@ -764,6 +764,7 @@
     "page_of": "{page} / {pages}",
     "zoom_in": "Acercar",
     "zoom_out": "Alejar",
-    "zoom_fit": "Ajustar al ancho"
+    "zoom_fit": "Ajustar al ancho",
+    "truncated": "Mostrando las primeras {rows} filas × {cols} columnas"
   }
 }

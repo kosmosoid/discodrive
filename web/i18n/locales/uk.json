@@ -764,6 +764,7 @@
     "page_of": "{page} / {pages}",
     "zoom_in": "Збільшити",
     "zoom_out": "Зменшити",
-    "zoom_fit": "За шириною"
+    "zoom_fit": "За шириною",
+    "truncated": "Показано перші {rows} рядків × {cols} стовпців"
   }
 }

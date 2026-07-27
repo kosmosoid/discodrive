@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { previewPlan, decodeUtf8Strict, extOf, TEXT_PREVIEW_MAX } from './kind'
+import { previewPlan, decodeUtf8Strict, extOf, TEXT_PREVIEW_MAX, OFFICE_PREVIEW_MAX } from './kind'
 
 describe('previewPlan', () => {
   it('maps images with the right blob mime (SVG must be image/svg+xml for <img>)', () => {
@@ -52,9 +52,20 @@ describe('previewPlan', () => {
 
   it('enforces the cap boundary: exactly 2 MiB previews, one byte more does not', () => {
     expect(previewPlan('a.md', TEXT_PREVIEW_MAX).kind).toBe('markdown')
-    expect(previewPlan('a.md', TEXT_PREVIEW_MAX + 1).kind).toBe('too_large')
+    expect(previewPlan('a.md', TEXT_PREVIEW_MAX + 1)).toEqual({ kind: 'too_large', max: TEXT_PREVIEW_MAX })
     expect(previewPlan('a.go', TEXT_PREVIEW_MAX).kind).toBe('code')
     expect(previewPlan('a.go', TEXT_PREVIEW_MAX + 1).kind).toBe('too_large')
+  })
+
+  it('routes office documents with their own 20 MiB cap', () => {
+    expect(previewPlan('report.docx', 100).kind).toBe('docx')
+    expect(previewPlan('table.xlsx', 100).kind).toBe('xlsx')
+    expect(previewPlan('old.xls', 100).kind).toBe('xlsx')
+    expect(previewPlan('calc.ods', 100).kind).toBe('xlsx')
+    // text cap does not apply, the office cap does
+    expect(previewPlan('big.xlsx', TEXT_PREVIEW_MAX + 1).kind).toBe('xlsx')
+    expect(previewPlan('big.xlsx', OFFICE_PREVIEW_MAX + 1)).toEqual({ kind: 'too_large', max: OFFICE_PREVIEW_MAX })
+    expect(previewPlan('big.docx', OFFICE_PREVIEW_MAX + 1)).toEqual({ kind: 'too_large', max: OFFICE_PREVIEW_MAX })
   })
 
   it('handles null size (unknown) as previewable', () => {
