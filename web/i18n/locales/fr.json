@@ -740,6 +740,19 @@
     "unplayable": "Ce navigateur ne peut pas lire ce format",
     "skipped_unplayable": "« {name} » ignoré : format non pris en charge",
     "skipped_missing": "« {name} » ignoré : fichier indisponible",
-    "popup_blocked": "Le navigateur a bloqué la fenêtre du lecteur — autorisez les pop-ups pour ce site"
+    "popup_blocked": "Le navigateur a bloqué la fenêtre du lecteur — autorisez les pop-ups pour ce site",
+    "eq": "Égaliseur",
+    "eq_enable": "Activer l’égaliseur",
+    "eq_reset": "Réinitialiser",
+    "preset_flat": "Neutre",
+    "preset_rock": "Rock",
+    "preset_pop": "Pop",
+    "preset_jazz": "Jazz",
+    "preset_classical": "Classique",
+    "preset_bass": "Renfort des basses",
+    "preset_treble": "Renfort des aigus",
+    "preset_vocal": "Voix",
+    "preset_electronic": "Électronique",
+    "preset_custom": "Personnalisé"
   }
 }

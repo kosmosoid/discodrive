@@ -740,6 +740,19 @@
     "unplayable": "Браузер не відтворює цей формат",
     "skipped_unplayable": "«{name}» пропущено: формат не підтримується",
     "skipped_missing": "«{name}» пропущено: файл недоступний",
-    "popup_blocked": "Браузер заблокував спливне вікно — дозвольте попапи для цього сайту"
+    "popup_blocked": "Браузер заблокував спливне вікно — дозвольте попапи для цього сайту",
+    "eq": "Еквалайзер",
+    "eq_enable": "Увімкнути еквалайзер",
+    "eq_reset": "Скинути",
+    "preset_flat": "Рівний",
+    "preset_rock": "Рок",
+    "preset_pop": "Поп",
+    "preset_jazz": "Джаз",
+    "preset_classical": "Класика",
+    "preset_bass": "Підсилення басів",
+    "preset_treble": "Підсилення верхів",
+    "preset_vocal": "Вокал",
+    "preset_electronic": "Електроніка",
+    "preset_custom": "Власний"
   }
 }

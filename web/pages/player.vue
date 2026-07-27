@@ -12,8 +12,14 @@ const {
 } = player
 
 const videoEl = ref<HTMLVideoElement | null>(null)
+const eq = useEq()
+const { enabled: eqEnabled } = eq
+const eqOpen = ref(false)
 onMounted(async () => {
-  if (videoEl.value) player.attachMedia(videoEl.value, 'popup')
+  if (videoEl.value) {
+    player.attachMedia(videoEl.value, 'popup')
+    eq.attach(videoEl.value)
+  }
   // Continue where the main window left off. Autoplay may be refused (no user
   // gesture in THIS window yet) — then we sit paused at the right position.
   await player.toggle()
@@ -30,7 +36,7 @@ function onVolume(e: Event) { player.setVolume(parseFloat((e.target as HTMLInput
 </script>
 
 <template>
-  <div class="flex h-screen flex-col bg-panel text-ink">
+  <div class="relative flex h-screen flex-col bg-panel text-ink">
     <video
       ref="videoEl"
       playsinline
@@ -66,8 +72,16 @@ function onVolume(e: Event) { player.setVolume(parseFloat((e.target as HTMLInput
         <span class="w-9 tabular-nums">{{ formatTime(duration) }}</span>
       </div>
 
+      <div v-if="eqOpen" class="absolute inset-x-2 bottom-14 z-10 rounded-xl border border-line bg-panel shadow-lg">
+        <EqPanel />
+      </div>
+
       <div class="flex items-center justify-between">
-        <div class="w-24" />
+        <div class="flex w-24 items-center">
+          <button class="btn-ghost px-1.5 py-1" :class="eqEnabled || eqOpen ? 'text-accent' : ''" :title="t('player.eq')" @click="eqOpen = !eqOpen">
+            <Icon name="lucide:audio-lines" size="14" />
+          </button>
+        </div>
         <div class="flex items-center justify-center gap-1">
           <button class="btn-ghost px-2 py-1" :title="t('player.prev')" @click="player.prev()">
             <Icon name="lucide:skip-back" size="18" />

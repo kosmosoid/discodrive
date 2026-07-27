@@ -740,6 +740,19 @@
     "unplayable": "This browser cannot play this format",
     "skipped_unplayable": "Skipped “{name}”: format not supported",
     "skipped_missing": "Skipped “{name}”: file unavailable",
-    "popup_blocked": "The browser blocked the pop-out window — allow pop-ups for this site"
+    "popup_blocked": "The browser blocked the pop-out window — allow pop-ups for this site",
+    "eq": "Equalizer",
+    "eq_enable": "Enable equalizer",
+    "eq_reset": "Reset",
+    "preset_flat": "Flat",
+    "preset_rock": "Rock",
+    "preset_pop": "Pop",
+    "preset_jazz": "Jazz",
+    "preset_classical": "Classical",
+    "preset_bass": "Bass boost",
+    "preset_treble": "Treble boost",
+    "preset_vocal": "Vocal",
+    "preset_electronic": "Electronic",
+    "preset_custom": "Custom"
   }
 }

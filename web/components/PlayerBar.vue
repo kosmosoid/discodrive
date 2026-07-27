@@ -9,6 +9,8 @@ const {
 } = player
 
 const queueOpen = ref(false)
+const eqOpen = ref(false)
+const { enabled: eqEnabled } = useEq()
 
 const playing = computed(() => status.value === 'playing' || status.value === 'buffering')
 const repeatIcon = computed(() => (repeat.value === 'one' ? 'lucide:repeat-1' : 'lucide:repeat'))
@@ -24,6 +26,7 @@ function pickTrack(i: number) {
   void player.playAt(i)
 }
 useModalEscape(computed(() => queueOpen.value), () => { queueOpen.value = false })
+useModalEscape(computed(() => eqOpen.value), () => { eqOpen.value = false })
 </script>
 
 <template>
@@ -54,6 +57,14 @@ useModalEscape(computed(() => queueOpen.value), () => { queueOpen.value = false 
         <span class="min-w-0 flex-1 truncate">{{ tr.title || tr.name }}</span>
         <span v-if="tr.duration" class="shrink-0 text-muted">{{ formatTime(tr.duration) }}</span>
       </button>
+    </div>
+
+    <!-- equalizer popover -->
+    <div
+      v-if="eqOpen"
+      class="absolute bottom-full right-2 z-30 mb-2 rounded-xl border border-line bg-panel shadow-lg"
+    >
+      <EqPanel />
     </div>
 
     <div class="flex items-center gap-3 px-3 py-2">
@@ -124,6 +135,9 @@ useModalEscape(computed(() => queueOpen.value), () => { queueOpen.value = false 
             @input="onVolume"
           />
         </div>
+        <button class="btn-ghost hidden px-2 py-1 md:inline-flex" :class="eqEnabled || eqOpen ? 'text-accent' : ''" :title="t('player.eq')" @click="eqOpen = !eqOpen">
+          <Icon name="lucide:audio-lines" size="16" />
+        </button>
         <button class="btn-ghost px-2 py-1" :class="queueOpen ? 'text-accent' : ''" :title="t('player.queue')" @click="queueOpen = !queueOpen">
           <Icon name="lucide:list-music" size="16" />
         </button>

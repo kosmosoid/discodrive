@@ -9,8 +9,12 @@ const { t } = useI18n()
 const { active, theater, currentIsVideo } = player
 
 const videoEl = ref<HTMLVideoElement | null>(null)
+const eq = useEq()
 onMounted(() => {
-  if (videoEl.value) player.attachMedia(videoEl.value, 'main')
+  if (videoEl.value) {
+    player.attachMedia(videoEl.value, 'main')
+    eq.attach(videoEl.value)
+  }
 })
 
 // Theater is only meaningful while the current track is a video; the engine
