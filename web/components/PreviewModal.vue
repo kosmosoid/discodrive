@@ -167,7 +167,14 @@ async function download() {
       <Icon name="lucide:chevron-right" size="22" />
     </button>
 
-    <div class="card flex h-full w-full max-w-5xl flex-col sm:h-auto sm:max-h-[92vh]" style="min-height: 40vh">
+    <!-- PDF gets an explicit card height: its viewer fills the card via absolute
+         positioning (percentage heights through auto-sized flex chains don't
+         resolve in Firefox), so the card can't size from its content. -->
+    <div
+      class="card flex h-full w-full max-w-5xl flex-col"
+      :class="st.kind === 'pdf' ? 'sm:h-[92vh]' : 'sm:h-auto sm:max-h-[92vh]'"
+      style="min-height: 40vh"
+    >
       <div class="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
         <div class="min-w-0">
           <div class="truncate text-sm font-medium" :title="current.name">{{ current.name }}</div>
@@ -187,7 +194,7 @@ async function download() {
         </div>
       </div>
 
-      <div class="min-h-0 flex-1" :class="st.kind === 'pdf' && st.pdfBlob ? '' : 'overflow-auto'">
+      <div class="min-h-0 flex-1" :class="st.kind === 'pdf' && st.pdfBlob ? 'relative' : 'overflow-auto'">
         <div v-if="st.busy" class="py-14 text-center text-sm text-muted">
           <Icon name="lucide:loader-circle" class="mx-auto mb-2 block animate-spin" size="28" />
           {{ t('common.loading') }}
@@ -205,7 +212,7 @@ async function download() {
           class="mx-auto max-h-full max-w-full object-contain p-3"
         />
 
-        <PreviewPdf v-else-if="st.pdfBlob" :key="index" :blob="st.pdfBlob" class="h-full" />
+        <PreviewPdf v-else-if="st.pdfBlob" :key="index" :blob="st.pdfBlob" class="absolute inset-0" />
 
         <!-- rendered markdown: html:false in the renderer, safe for v-html -->
         <div v-else-if="st.mdHtml" class="md-body p-4 sm:p-6" v-html="st.mdHtml" />

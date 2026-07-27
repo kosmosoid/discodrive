@@ -54,10 +54,7 @@ function observePages() {
   observer = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {
-        const el = e.target as HTMLElement
-        if (!e.isIntersecting) continue
-        currentPage.value = Number(el.dataset.page) || currentPage.value
-        renderPage(el)
+        if (e.isIntersecting) renderPage(e.target as HTMLElement)
       }
     },
     { root: scroller.value, rootMargin: '200% 0px' },
@@ -112,6 +109,19 @@ function rerenderAll() {
   observePages()
 }
 
+// The render observer pre-renders 200% ahead, so "intersecting" ≠ "on screen";
+// the page counter is derived from scroll position instead.
+function onScroll() {
+  const sc = scroller.value
+  if (!sc) return
+  const top = sc.scrollTop + sc.clientHeight / 3
+  let page = 1
+  sc.querySelectorAll<HTMLElement>('[data-page]').forEach((el) => {
+    if (el.offsetTop <= top) page = Number(el.dataset.page) || page
+  })
+  currentPage.value = page
+}
+
 function zoomBy(f: number) {
   zoom.value = Math.min(4, Math.max(0.4, zoom.value * f))
   rerenderAll()
@@ -123,7 +133,7 @@ function zoomFit() {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col">
+  <div class="flex min-h-0 flex-col">
     <div v-if="busy" class="py-10 text-center text-sm text-muted">
       <Icon name="lucide:loader-circle" class="mx-auto mb-2 block animate-spin" size="28" />
       {{ t('common.loading') }}
@@ -148,7 +158,7 @@ function zoomFit() {
         </button>
       </div>
 
-      <div ref="scroller" class="min-h-0 flex-1 overflow-auto bg-black/20 p-4">
+      <div ref="scroller" class="relative min-h-0 flex-1 overflow-auto bg-black/20 p-4" @scroll.passive="onScroll">
         <div
           v-for="p in numPages"
           :key="p"
