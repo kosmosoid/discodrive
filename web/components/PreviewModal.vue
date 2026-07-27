@@ -233,8 +233,10 @@ async function download() {
         <!-- rendered markdown: html:false in the renderer, safe for v-html -->
         <div v-else-if="st.mdHtml" class="md-body p-4 sm:p-6" v-html="st.mdHtml" />
 
-        <!-- docx: mammoth output sanitized by DOMPurify (lib/preview/docx.ts) -->
-        <div v-else-if="st.docxHtml" class="md-body p-4 sm:p-6" v-html="st.docxHtml" />
+        <!-- docx: mammoth output sanitized by DOMPurify (lib/preview/docx.ts).
+             mammoth is a semantic converter (word styling is dropped by design),
+             so the best we can do is a comfortable reader column. -->
+        <div v-else-if="st.docxHtml" class="md-body docx-body p-4 sm:p-6" v-html="st.docxHtml" />
 
         <!-- highlighted source: hljs escapes, safe for v-html -->
         <pre
@@ -325,6 +327,17 @@ async function download() {
   font-size: 0.85em;
 }
 .md-body .md-img-placeholder::before { content: '🖼 '; }
+
+/* --- docx reader mode: a full-width document column reads badly, cap it --- */
+.docx-body {
+  max-width: 46rem;
+  margin-inline: auto;
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+.docx-body p { margin: 0.8em 0; }
+.docx-body img { max-width: 100%; height: auto; margin: 0.8em 0; }
+.docx-body table { max-width: 100%; }
 
 /* --- highlight.js theme on the app palette (light/dark via --c-* vars) --- */
 .preview-code { color: rgb(var(--c-ink)); }
