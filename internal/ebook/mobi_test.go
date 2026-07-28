@@ -27,9 +27,9 @@ func buildMOBI(t *testing.T) []byte {
 		recInfoEntrySize = 8
 		numRecords       = 1
 
-		palmDOCSize  = 16
-		mobiMagic    = "MOBI"
-		mobiHdrLen   = 148 // covers all fields up through EXTH flags (0x80+4=132) + extra
+		palmDOCSize = 16
+		mobiMagic   = "MOBI"
+		mobiHdrLen  = 148 // covers all fields up through EXTH flags (0x80+4=132) + extra
 	)
 
 	title := "Test Book Title"
@@ -48,9 +48,9 @@ func buildMOBI(t *testing.T) []byte {
 		return b
 	}
 
-	exthRec100 := buildEXTH(100, []byte(authorName))    // author
-	exthRec101 := buildEXTH(101, []byte(publisher))     // publisher
-	exthRec105 := buildEXTH(105, []byte(subject))       // subject
+	exthRec100 := buildEXTH(100, []byte(authorName)) // author
+	exthRec101 := buildEXTH(101, []byte(publisher))  // publisher
+	exthRec105 := buildEXTH(105, []byte(subject))    // subject
 
 	exthRecords := make([]byte, 0)
 	exthRecords = append(exthRecords, exthRec100...)
@@ -58,7 +58,7 @@ func buildMOBI(t *testing.T) []byte {
 	exthRecords = append(exthRecords, exthRec105...)
 
 	// EXTH header: "EXTH" + totalLen(4) + numRec(4) + records + padding to 4-byte boundary.
-	exthHeaderFixed := 12                          // "EXTH" + len + count
+	exthHeaderFixed := 12 // "EXTH" + len + count
 	exthDataLen := exthHeaderFixed + len(exthRecords)
 	// Pad to 4-byte boundary.
 	if exthDataLen%4 != 0 {
@@ -80,7 +80,7 @@ func buildMOBI(t *testing.T) []byte {
 
 	// ---- Build MOBI header (mobiHdrLen bytes) ----
 	mobiHdr := make([]byte, mobiHdrLen)
-	copy(mobiHdr[0:], mobiMagic) // "MOBI" magic
+	copy(mobiHdr[0:], mobiMagic)                                // "MOBI" magic
 	binary.BigEndian.PutUint32(mobiHdr[4:], uint32(mobiHdrLen)) // header length
 	// mobiHdr[8:12] = mobiType (uint32) — 0x002 = Mobipocket Book
 	binary.BigEndian.PutUint32(mobiHdr[8:], 2)
@@ -98,12 +98,12 @@ func buildMOBI(t *testing.T) []byte {
 
 	// ---- Build PalmDOC header (16 bytes) ----
 	palmDOC := make([]byte, palmDOCSize)
-	binary.BigEndian.PutUint16(palmDOC[0:], 1)    // compression: PalmDOC
+	binary.BigEndian.PutUint16(palmDOC[0:], 1) // compression: PalmDOC
 	// unused: palmDOC[2:4] = 0
-	binary.BigEndian.PutUint32(palmDOC[4:], 0)    // text length
-	binary.BigEndian.PutUint16(palmDOC[8:], 1)    // record count
+	binary.BigEndian.PutUint32(palmDOC[4:], 0)     // text length
+	binary.BigEndian.PutUint16(palmDOC[8:], 1)     // record count
 	binary.BigEndian.PutUint16(palmDOC[10:], 4096) // record size
-	binary.BigEndian.PutUint16(palmDOC[12:], 0)   // encryption type: none
+	binary.BigEndian.PutUint16(palmDOC[12:], 0)    // encryption type: none
 
 	// ---- Assemble record0 ----
 	record0 := make([]byte, 0, palmDOCSize+mobiHdrLen+len(exthBlock)+len(titleBytes))

@@ -94,15 +94,15 @@ const (
 
 // opfMetadata holds all Dublin Core and OPF meta elements.
 type opfMetadata struct {
-	Titles      []opfDCText `xml:"http://purl.org/dc/elements/1.1/ title"`
-	Creators    []opfCreator `xml:"http://purl.org/dc/elements/1.1/ creator"`
-	Languages   []opfDCText `xml:"http://purl.org/dc/elements/1.1/ language"`
-	Identifiers []opfIdentifier `xml:"http://purl.org/dc/elements/1.1/ identifier"`
-	Publishers  []opfDCText `xml:"http://purl.org/dc/elements/1.1/ publisher"`
-	Dates       []opfDCText `xml:"http://purl.org/dc/elements/1.1/ date"`
-	Descriptions []opfDCText `xml:"http://purl.org/dc/elements/1.1/ description"`
-	Subjects    []opfDCText `xml:"http://purl.org/dc/elements/1.1/ subject"`
-	Metas       []opfMeta   `xml:"meta"`
+	Titles       []opfDCText     `xml:"http://purl.org/dc/elements/1.1/ title"`
+	Creators     []opfCreator    `xml:"http://purl.org/dc/elements/1.1/ creator"`
+	Languages    []opfDCText     `xml:"http://purl.org/dc/elements/1.1/ language"`
+	Identifiers  []opfIdentifier `xml:"http://purl.org/dc/elements/1.1/ identifier"`
+	Publishers   []opfDCText     `xml:"http://purl.org/dc/elements/1.1/ publisher"`
+	Dates        []opfDCText     `xml:"http://purl.org/dc/elements/1.1/ date"`
+	Descriptions []opfDCText     `xml:"http://purl.org/dc/elements/1.1/ description"`
+	Subjects     []opfDCText     `xml:"http://purl.org/dc/elements/1.1/ subject"`
+	Metas        []opfMeta       `xml:"meta"`
 }
 
 // opfDCText is a simple Dublin Core text element.

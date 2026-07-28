@@ -7,7 +7,7 @@ import (
 
 // OPDS media type constants (OPDS 1.2 / RFC 5023).
 const (
-	mediaTypeNavigation = "application/atom+xml;profile=opds-catalog;kind=navigation"
+	mediaTypeNavigation  = "application/atom+xml;profile=opds-catalog;kind=navigation"
 	mediaTypeAcquisition = "application/atom+xml;profile=opds-catalog;kind=acquisition"
 )
 

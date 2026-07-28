@@ -85,7 +85,7 @@ func parseCBZ(path string) (Meta, error) {
 	// Collect image entries and look for ComicInfo.xml in one pass.
 	var (
 		infoData  []byte
-		imageKeys []string                // sorted names of image entries
+		imageKeys []string                 // sorted names of image entries
 		imageMap  = map[string]*zip.File{} // name → zip.File
 	)
 

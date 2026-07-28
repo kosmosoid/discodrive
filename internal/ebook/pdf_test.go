@@ -14,11 +14,12 @@ import (
 // so these fixtures parse despite imperfect offsets.
 //
 // Structure:
-//   1 0 obj  — catalog
-//   2 0 obj  — pages
-//   3 0 obj  — page
-//   4 0 obj  — info dict  (Title, Author)
-//   xref + trailer
+//
+//	1 0 obj  — catalog
+//	2 0 obj  — pages
+//	3 0 obj  — page
+//	4 0 obj  — info dict  (Title, Author)
+//	xref + trailer
 //
 // PDF string encoding: plain ASCII parentheses literal, no special chars.
 var minimalPDFWithInfo = []byte(

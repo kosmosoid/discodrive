@@ -11,10 +11,10 @@ import (
 
 // parsedOpenSearch is a minimal struct for parsing an OpenSearch description document in tests.
 type parsedOpenSearch struct {
-	XMLName     xml.Name           `xml:"OpenSearchDescription"`
-	ShortName   string             `xml:"ShortName"`
-	Description string             `xml:"Description"`
-	Urls        []parsedSearchURL  `xml:"Url"`
+	XMLName     xml.Name          `xml:"OpenSearchDescription"`
+	ShortName   string            `xml:"ShortName"`
+	Description string            `xml:"Description"`
+	Urls        []parsedSearchURL `xml:"Url"`
 }
 
 type parsedSearchURL struct {

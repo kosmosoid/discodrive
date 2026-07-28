@@ -128,7 +128,7 @@ func TestParseTriggerMinutes(t *testing.T) {
 		"PT0S":             {0, true},
 		"-PT1H30M":         {90, true},
 		"20260611T090000Z": {0, false},
-		"nonsense":             {0, false},
+		"nonsense":         {0, false},
 	}
 	for in, want := range cases {
 		min, ok := parseTriggerMinutes(in)

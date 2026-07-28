@@ -32,8 +32,8 @@ type tagInfoDTO struct {
 // tagEditRequest: `fields` lists which keys to apply; `values` carries the new
 // values; `cover` is "keep" (omitted), "remove" (null), or base64 data.
 type tagEditRequest struct {
-	Fields []string       `json:"fields"`
-	Values map[string]any `json:"values"`
+	Fields []string        `json:"fields"`
+	Values map[string]any  `json:"values"`
 	Cover  json.RawMessage `json:"cover"` // absent=keep, null=remove, {"data","mime"}=replace
 }
 

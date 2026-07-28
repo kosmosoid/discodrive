@@ -45,7 +45,7 @@ func NewWebAuthn(baseDomain string) (*webauthn.WebAuthn, error) {
 	}
 	return webauthn.New(&webauthn.Config{
 		RPDisplayName: "discodrive",
-		RPID:          u.Hostname(),                    // host only, no scheme/port
+		RPID:          u.Hostname(),                        // host only, no scheme/port
 		RPOrigins:     []string{u.Scheme + "://" + u.Host}, // host incl port
 	})
 }
@@ -64,9 +64,9 @@ type waUser struct {
 	creds []webauthn.Credential
 }
 
-func (w *waUser) WebAuthnID() []byte                        { return w.u.ID.Bytes[:] }
-func (w *waUser) WebAuthnName() string                      { return w.u.Email }
-func (w *waUser) WebAuthnDisplayName() string               { return w.u.Email }
+func (w *waUser) WebAuthnID() []byte                         { return w.u.ID.Bytes[:] }
+func (w *waUser) WebAuthnName() string                       { return w.u.Email }
+func (w *waUser) WebAuthnDisplayName() string                { return w.u.Email }
 func (w *waUser) WebAuthnCredentials() []webauthn.Credential { return w.creds }
 
 // loadWAUser builds a waUser by loading the account and its decoded credentials.

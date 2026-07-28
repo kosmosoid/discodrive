@@ -44,13 +44,13 @@ type Author struct {
 // Meta holds metadata extracted from one e-book file.
 type Meta struct {
 	Title, SortTitle, Language, ISBN, Description, Publisher, Date string
-	Series                                                          string
-	SeriesIndex                                                     float64
-	Authors                                                         []Author
-	Tags                                                            []string
-	Format, ContentType                                             string
-	CoverData                                                       []byte
-	CoverType                                                       string // MIME of CoverData, e.g. "image/jpeg"
+	Series                                                         string
+	SeriesIndex                                                    float64
+	Authors                                                        []Author
+	Tags                                                           []string
+	Format, ContentType                                            string
+	CoverData                                                      []byte
+	CoverType                                                      string // MIME of CoverData, e.g. "image/jpeg"
 }
 
 // ReadMeta extracts metadata from an e-book file at path. Format and

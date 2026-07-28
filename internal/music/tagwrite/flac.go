@@ -3,9 +3,9 @@ package tagwrite
 import (
 	"strconv"
 
-	flac "github.com/go-flac/go-flac/v2"
 	"github.com/go-flac/flacpicture/v2"
 	"github.com/go-flac/flacvorbis/v2"
+	flac "github.com/go-flac/go-flac/v2"
 )
 
 type flacWriter struct{}

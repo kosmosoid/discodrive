@@ -10,10 +10,10 @@ const mediaTypeOPDS2 = "application/opds+json"
 
 // feed2 is the top-level OPDS 2.0 navigation/acquisition feed object.
 type feed2 struct {
-	Metadata     metadata2     `json:"metadata"`
-	Links        []link2       `json:"links,omitempty"`
-	Navigation   []link2       `json:"navigation,omitempty"`
-	Groups       []group2      `json:"groups,omitempty"`
+	Metadata     metadata2      `json:"metadata"`
+	Links        []link2        `json:"links,omitempty"`
+	Navigation   []link2        `json:"navigation,omitempty"`
+	Groups       []group2       `json:"groups,omitempty"`
 	Publications []publication2 `json:"publications,omitempty"`
 }
 
@@ -34,9 +34,9 @@ type link2 struct {
 
 // group2 is an OPDS 2.0 group inside a feed.
 type group2 struct {
-	Metadata     metadata2     `json:"metadata"`
-	Links        []link2       `json:"links,omitempty"`
-	Navigation   []link2       `json:"navigation,omitempty"`
+	Metadata     metadata2      `json:"metadata"`
+	Links        []link2        `json:"links,omitempty"`
+	Navigation   []link2        `json:"navigation,omitempty"`
 	Publications []publication2 `json:"publications,omitempty"`
 }
 

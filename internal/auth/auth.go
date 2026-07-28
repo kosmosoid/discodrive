@@ -30,8 +30,8 @@ type Service struct {
 	pool   *pgxpool.Pool
 	q      *db.Queries
 	issuer *TokenIssuer
-	cipher *secret.Cipher       // encrypts TOTP secrets (A.3); nil/disabled → 2FA setup refused
-	wa     *webauthn.WebAuthn   // WebAuthn relying party (A.4); nil → WebAuthn unavailable
+	cipher *secret.Cipher     // encrypts TOTP secrets (A.3); nil/disabled → 2FA setup refused
+	wa     *webauthn.WebAuthn // WebAuthn relying party (A.4); nil → WebAuthn unavailable
 	// lookupUser verifies a user against the DB in the middleware (role/existence check).
 	// Extracted as a field so the seam is testable without a live DB.
 	lookupUser func(context.Context, pgtype.UUID) (db.User, error)
