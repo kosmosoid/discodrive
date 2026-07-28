@@ -24,6 +24,7 @@
     "@iconify-json/lucide": "^1.2.18",
     "@nuxt/icon": "^1.10.3",
     "@nuxtjs/tailwindcss": "^6.12.2",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^25.9.3",
     "@types/qrcode": "^1.5.5",
     "jsdom": "^30.0.0",
