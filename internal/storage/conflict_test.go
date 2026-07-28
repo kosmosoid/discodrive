@@ -5,12 +5,9 @@ import (
 	"io"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"discodrive/internal/db"
 	"discodrive/internal/storage"
@@ -28,8 +25,7 @@ func setupFS(t *testing.T) (*storage.FileService, *db.Queries, string, string) {
 		tcpostgres.WithDatabase("kf"),
 		tcpostgres.WithUsername("kf"),
 		tcpostgres.WithPassword("kf"),
-		testcontainers.WithWaitStrategy(
-			wait.ForListeningPort("5432/tcp").WithStartupTimeout(60*time.Second)),
+		tcpostgres.BasicWaitStrategies(),
 	)
 	if err != nil {
 		t.Skipf("could not start a postgres container (Docker required): %v", err)

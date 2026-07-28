@@ -3,12 +3,9 @@ package dav_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"discodrive/internal/dav"
 	"discodrive/internal/db"
@@ -19,7 +16,7 @@ func setupShares(t *testing.T) (*dav.Service, *db.Queries, string, string) {
 	ctx := context.Background()
 	pgC, err := tcpostgres.Run(ctx, "postgres:16-alpine",
 		tcpostgres.WithDatabase("kf"), tcpostgres.WithUsername("kf"), tcpostgres.WithPassword("kf"),
-		testcontainers.WithWaitStrategy(wait.ForListeningPort("5432/tcp").WithStartupTimeout(60*time.Second)))
+		tcpostgres.BasicWaitStrategies())
 	if err != nil {
 		t.Skipf("Docker required: %v", err)
 	}

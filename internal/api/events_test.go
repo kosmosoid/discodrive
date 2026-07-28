@@ -7,9 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"discodrive/internal/auth"
 	"discodrive/internal/db"
@@ -20,7 +18,7 @@ func eventsTestDB(t *testing.T) (*pgxpool.Pool, *db.Queries, context.Context) {
 	ctx := context.Background()
 	pgC, err := tcpostgres.Run(ctx, "postgres:16-alpine",
 		tcpostgres.WithDatabase("kf"), tcpostgres.WithUsername("kf"), tcpostgres.WithPassword("kf"),
-		testcontainers.WithWaitStrategy(wait.ForListeningPort("5432/tcp").WithStartupTimeout(60*time.Second)))
+		tcpostgres.BasicWaitStrategies())
 	if err != nil {
 		t.Skipf("Docker required: %v", err)
 	}
