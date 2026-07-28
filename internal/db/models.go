@@ -111,6 +111,22 @@ type Bookmark struct {
 	ChangedAt  pgtype.Timestamptz `json:"changed_at"`
 }
 
+type BrowserBookmark struct {
+	ID             pgtype.UUID        `json:"id"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	ParentID       pgtype.UUID        `json:"parent_id"`
+	IsFolder       bool               `json:"is_folder"`
+	Title          string             `json:"title"`
+	Url            string             `json:"url"`
+	Position       int32              `json:"position"`
+	Deleted        bool               `json:"deleted"`
+	Seq            int64              `json:"seq"`
+	FaviconExt     string             `json:"favicon_ext"`
+	FaviconTriedAt pgtype.Timestamptz `json:"favicon_tried_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Calendar struct {
 	ID         pgtype.UUID        `json:"id"`
 	UserID     pgtype.UUID        `json:"user_id"`
@@ -343,6 +359,24 @@ type ResourceShare struct {
 	SharePasswordHash pgtype.Text        `json:"share_password_hash"`
 }
 
+type SavedItem struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	Url          string             `json:"url"`
+	Kind         string             `json:"kind"`
+	Title        string             `json:"title"`
+	Status       string             `json:"status"`
+	ErrorMsg     string             `json:"error_msg"`
+	ContentPath  pgtype.Text        `json:"content_path"`
+	SizeBytes    pgtype.Int8        `json:"size_bytes"`
+	BytesDone    int64              `json:"bytes_done"`
+	Meta         []byte             `json:"meta"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ContentHtml  pgtype.Text        `json:"content_html"`
+	CookieHeader pgtype.Text        `json:"cookie_header"`
+}
+
 type Setting struct {
 	Key       string             `json:"key"`
 	Value     string             `json:"value"`
@@ -407,6 +441,8 @@ type User struct {
 	TokenVersion       int64              `json:"token_version"`
 	Language           string             `json:"language"`
 	MustChangePassword bool               `json:"must_change_password"`
+	BookmarkSeq        int64              `json:"bookmark_seq"`
+	BookmarkGcSeq      int64              `json:"bookmark_gc_seq"`
 }
 
 type UserTotp struct {

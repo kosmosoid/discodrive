@@ -81,12 +81,14 @@ type Querier interface {
 	BookAuthors(ctx context.Context, bookID pgtype.UUID) ([]BookAuthorsRow, error)
 	BookTags(ctx context.Context, bookID pgtype.UUID) ([]string, error)
 	BumpAddressbookCtag(ctx context.Context, id pgtype.UUID) error
+	BumpBookmarkGCSeq(ctx context.Context, arg BumpBookmarkGCSeqParams) error
 	BumpCalendarCtag(ctx context.Context, id pgtype.UUID) error
 	BumpNodeVersion(ctx context.Context, id pgtype.UUID) (int64, error)
 	// A user's access level to a file_node, accounting for inheritance: we check
 	// the node itself AND all its ancestors (recursive CTE), taking active shares for the user.
 	CalendarShareForUser(ctx context.Context, arg CalendarShareForUserParams) (pgtype.UUID, error)
 	ClaimEpisodeForDownload(ctx context.Context, arg ClaimEpisodeForDownloadParams) (int64, error)
+	ClaimSavedItem(ctx context.Context, id pgtype.UUID) (int64, error)
 	ClearBookAuthors(ctx context.Context, bookID pgtype.UUID) error
 	ClearBookTags(ctx context.Context, bookID pgtype.UUID) error
 	ClearEbookCredentials(ctx context.Context, userID pgtype.UUID) error
@@ -110,6 +112,7 @@ type Querier interface {
 	// == addressbooks ==
 	CreateAddressbook(ctx context.Context, arg CreateAddressbookParams) (Addressbook, error)
 	CreateBookmark(ctx context.Context, arg CreateBookmarkParams) error
+	CreateBrowserBookmark(ctx context.Context, arg CreateBrowserBookmarkParams) (BrowserBookmark, error)
 	// == calendars ==
 	CreateCalendar(ctx context.Context, arg CreateCalendarParams) (Calendar, error)
 	CreateCalendarWithComponents(ctx context.Context, arg CreateCalendarWithComponentsParams) (Calendar, error)
@@ -137,11 +140,13 @@ type Querier interface {
 	DeleteCalendarObject(ctx context.Context, arg DeleteCalendarObjectParams) (int64, error)
 	DeleteDevice(ctx context.Context, arg DeleteDeviceParams) error
 	DeleteExpiredPairings(ctx context.Context) error
+	DeleteFinishedDownloads(ctx context.Context, arg DeleteFinishedDownloadsParams) (int64, error)
 	DeleteInternetRadioStation(ctx context.Context, arg DeleteInternetRadioStationParams) (int64, error)
 	DeletePlaylistForUser(ctx context.Context, arg DeletePlaylistForUserParams) error
 	DeletePodcastChannelForUser(ctx context.Context, arg DeletePodcastChannelForUserParams) (int64, error)
 	DeletePodcastEpisodeForUser(ctx context.Context, arg DeletePodcastEpisodeForUserParams) (int64, error)
 	DeleteRating(ctx context.Context, arg DeleteRatingParams) error
+	DeleteSavedItemForUser(ctx context.Context, arg DeleteSavedItemForUserParams) (DeleteSavedItemForUserRow, error)
 	DeleteSetting(ctx context.Context, key string) error
 	DeleteShare(ctx context.Context, id pgtype.UUID) error
 	DeleteSongByNode(ctx context.Context, nodeID pgtype.UUID) error
@@ -150,6 +155,7 @@ type Querier interface {
 	DeleteWebAuthnCredential(ctx context.Context, arg DeleteWebAuthnCredentialParams) error
 	EnabledEbookUsers(ctx context.Context) ([]EnabledEbookUsersRow, error)
 	EnabledMusicUsers(ctx context.Context) ([]EnabledMusicUsersRow, error)
+	GCBrowserBookmarkTombstones(ctx context.Context, updatedAt pgtype.Timestamptz) ([]GCBrowserBookmarkTombstonesRow, error)
 	GetActiveShareByToken(ctx context.Context, token string) (ResourceShare, error)
 	GetAddressbook(ctx context.Context, id pgtype.UUID) (Addressbook, error)
 	GetAddressbookByURI(ctx context.Context, uri string) (Addressbook, error)
@@ -158,6 +164,8 @@ type Querier interface {
 	GetAlbumWithArtist(ctx context.Context, id pgtype.UUID) (GetAlbumWithArtistRow, error)
 	GetArtistName(ctx context.Context, id pgtype.UUID) (string, error)
 	GetBookByNode(ctx context.Context, nodeID pgtype.UUID) (Book, error)
+	GetBookmarkSyncState(ctx context.Context, id pgtype.UUID) (GetBookmarkSyncStateRow, error)
+	GetBrowserBookmarkForUser(ctx context.Context, arg GetBrowserBookmarkForUserParams) (BrowserBookmark, error)
 	GetCalendar(ctx context.Context, id pgtype.UUID) (Calendar, error)
 	GetCalendarByURI(ctx context.Context, uri string) (Calendar, error)
 	GetCalendarObject(ctx context.Context, arg GetCalendarObjectParams) (CalendarObject, error)
@@ -184,6 +192,7 @@ type Querier interface {
 	GetPodcastChannelForUser(ctx context.Context, arg GetPodcastChannelForUserParams) (PodcastChannel, error)
 	// Returns the stored reading position for (user_id, document).
 	GetReadingProgress(ctx context.Context, arg GetReadingProgressParams) (ReadingProgress, error)
+	GetSavedItemForUser(ctx context.Context, arg GetSavedItemForUserParams) (SavedItem, error)
 	GetSetting(ctx context.Context, key string) (Setting, error)
 	GetShare(ctx context.Context, id pgtype.UUID) (ResourceShare, error)
 	GetSongByNode(ctx context.Context, nodeID pgtype.UUID) (Song, error)
@@ -210,6 +219,13 @@ type Querier interface {
 	ListAllPodcastChannels(ctx context.Context) ([]PodcastChannel, error)
 	ListAuditLog(ctx context.Context, arg ListAuditLogParams) ([]AuditLog, error)
 	ListBookmarks(ctx context.Context, userID pgtype.UUID) ([]Bookmark, error)
+	ListBrowserBookmarkChanges(ctx context.Context, arg ListBrowserBookmarkChangesParams) ([]BrowserBookmark, error)
+	// Bookmarks: server-authoritative tree with per-user seq cursor + tombstones.
+	// Every mutation bumps users.bookmark_seq via a CTE in the same statement: the
+	// row lock on users serializes a user's mutations, so per-user commit order
+	// equals seq order and a committed bookmark_seq is always a safe cursor.
+	ListBrowserBookmarks(ctx context.Context, userID pgtype.UUID) ([]BrowserBookmark, error)
+	ListBrowserBookmarksNeedingFavicon(ctx context.Context, limit int32) ([]BrowserBookmark, error)
 	ListCalendarObjects(ctx context.Context, calendarID pgtype.UUID) ([]CalendarObject, error)
 	ListCalendars(ctx context.Context, userID pgtype.UUID) ([]Calendar, error)
 	// Delta sync: changes after seq, with the node's current state.
@@ -232,11 +248,14 @@ type Querier interface {
 	// Nodes that have more than keep versions (trimming candidates).
 	ListNodesWithExcessVersions(ctx context.Context, keep interface{}) ([]pgtype.UUID, error)
 	ListNotificationPrefs(ctx context.Context, userID pgtype.UUID) ([]ListNotificationPrefsRow, error)
+	ListPendingSavedItems(ctx context.Context, limit int32) ([]SavedItem, error)
 	ListPlaylistsByUser(ctx context.Context, userID pgtype.UUID) ([]Playlist, error)
 	ListPodcastChannelsForUser(ctx context.Context, userID pgtype.UUID) ([]PodcastChannel, error)
 	ListPublicSettings(ctx context.Context) ([]Setting, error)
 	ListQuotaCandidates(ctx context.Context) ([]ListQuotaCandidatesRow, error)
 	ListRootNodes(ctx context.Context, userID pgtype.UUID) ([]Node, error)
+	// Downloads are an internal queue and never appear in listings.
+	ListSavedItems(ctx context.Context, arg ListSavedItemsParams) ([]SavedItem, error)
 	ListSecretKeys(ctx context.Context) ([]string, error)
 	ListSharesForResource(ctx context.Context, arg ListSharesForResourceParams) ([]ResourceShare, error)
 	ListSharesForUser(ctx context.Context, sharedWithUser pgtype.UUID) ([]ResourceShare, error)
@@ -265,6 +284,10 @@ type Querier interface {
 	MarkBackupCodeUsed(ctx context.Context, id pgtype.UUID) error
 	MarkQuotaNotified(ctx context.Context, id pgtype.UUID) error
 	MaxPlaylistPosition(ctx context.Context, playlistID pgtype.UUID) (interface{}, error)
+	// MoveBookmark re-parents a node. The NOT EXISTS guard rejects a move that
+	// would create a cycle (the target parent must not be inside the moved subtree).
+	MoveBrowserBookmark(ctx context.Context, arg MoveBrowserBookmarkParams) (BrowserBookmark, error)
+	NextBookmarkSeq(ctx context.Context, id pgtype.UUID) (int64, error)
 	NextChangeSeq(ctx context.Context, id pgtype.UUID) (int64, error)
 	NotificationPrefsForEvent(ctx context.Context, arg NotificationPrefsForEventParams) ([]NotificationPrefsForEventRow, error)
 	// Returns accessible songs in random order with optional genre/year filters.
@@ -280,6 +303,8 @@ type Querier interface {
 	RecordSubtreeChanges(ctx context.Context, arg RecordSubtreeChangesParams) error
 	RefreshAlbumSongCount(ctx context.Context, id pgtype.UUID) error
 	RenameWebAuthnCredential(ctx context.Context, arg RenameWebAuthnCredentialParams) error
+	ResetStaleSavedItems(ctx context.Context) (int64, error)
+	RetrySavedItem(ctx context.Context, arg RetrySavedItemParams) (int64, error)
 	// Rewrite disk_path of a node and its whole subtree on rename/move (mirrors the tree).
 	RewriteSubtreePaths(ctx context.Context, arg RewriteSubtreePathsParams) error
 	// Like RewriteSubtreePaths, but only for trashed nodes — so restoring doesn't
@@ -301,6 +326,10 @@ type Querier interface {
 	SetArtistCover(ctx context.Context, arg SetArtistCoverParams) error
 	SetBookCoverPath(ctx context.Context, arg SetBookCoverPathParams) error
 	SetBookMetadataEdited(ctx context.Context, arg SetBookMetadataEditedParams) error
+	// SetBookmarkFavicon does NOT bump seq: favicons are server-side decoration,
+	// browsers don't need to re-pull the node.
+	SetBrowserBookmarkFavicon(ctx context.Context, arg SetBrowserBookmarkFaviconParams) error
+	SetBrowserBookmarkTitleIfEmpty(ctx context.Context, arg SetBrowserBookmarkTitleIfEmptyParams) (int64, error)
 	SetCalendarColor(ctx context.Context, arg SetCalendarColorParams) error
 	SetCalendarName(ctx context.Context, arg SetCalendarNameParams) error
 	SetDeviceTokenHash(ctx context.Context, arg SetDeviceTokenHashParams) error
@@ -311,6 +340,9 @@ type Querier interface {
 	SetPodcastChannelCoverPath(ctx context.Context, arg SetPodcastChannelCoverPathParams) error
 	SetPodcastChannelMeta(ctx context.Context, arg SetPodcastChannelMetaParams) error
 	SetRating(ctx context.Context, arg SetRatingParams) error
+	// content_html/cookie_header are dropped once processed — transport, not storage.
+	SetSavedItemDone(ctx context.Context, arg SetSavedItemDoneParams) (int64, error)
+	SetSavedItemError(ctx context.Context, arg SetSavedItemErrorParams) error
 	SetSharePasswordHash(ctx context.Context, arg SetSharePasswordHashParams) error
 	SetUserLanguage(ctx context.Context, arg SetUserLanguageParams) error
 	SharedAccessForUser(ctx context.Context, arg SharedAccessForUserParams) (SharedAccessForUserRow, error)
@@ -326,6 +358,10 @@ type Querier interface {
 	SongsMetaByNodeIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]SongsMetaByNodeIDsRow, error)
 	Star(ctx context.Context, arg StarParams) error
 	StarredItems(ctx context.Context, userID pgtype.UUID) ([]StarredItemsRow, error)
+	// TombstoneBookmarkTree marks the whole subtree deleted with one seq value
+	// (valid: the cursor needs per-row monotonicity, not uniqueness). Runs inside
+	// a tx after NextBookmarkSeq.
+	TombstoneBrowserBookmarkTree(ctx context.Context, arg TombstoneBrowserBookmarkTreeParams) (int64, error)
 	// Returns accessible songs for a given artist name ordered by caller's play count descending.
 	TopSongsByArtistName(ctx context.Context, arg TopSongsByArtistNameParams) ([]TopSongsByArtistNameRow, error)
 	TouchDevice(ctx context.Context, id pgtype.UUID) error
@@ -334,6 +370,7 @@ type Querier interface {
 	UndeleteSubtree(ctx context.Context, arg UndeleteSubtreeParams) error
 	Unstar(ctx context.Context, arg UnstarParams) error
 	UpdateBookMetadata(ctx context.Context, arg UpdateBookMetadataParams) error
+	UpdateBrowserBookmark(ctx context.Context, arg UpdateBrowserBookmarkParams) (BrowserBookmark, error)
 	UpdateInternetRadioStation(ctx context.Context, arg UpdateInternetRadioStationParams) (int64, error)
 	UpdateNodeContent(ctx context.Context, arg UpdateNodeContentParams) (Node, error)
 	UpdateNodeName(ctx context.Context, arg UpdateNodeNameParams) (Node, error)
@@ -342,6 +379,7 @@ type Querier interface {
 	// + clear the forced-change flag (A.2).
 	UpdatePassword(ctx context.Context, arg UpdatePasswordParams) (User, error)
 	UpdatePlaylistMeta(ctx context.Context, arg UpdatePlaylistMetaParams) error
+	UpdateSavedItemProgress(ctx context.Context, arg UpdateSavedItemProgressParams) (int64, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	// A.5: persist the credential after a login (sign_count bumps; clone detection) + last used.
 	UpdateWebAuthnCredential(ctx context.Context, arg UpdateWebAuthnCredentialParams) error
@@ -350,6 +388,9 @@ type Querier interface {
 	UpsertAlbum(ctx context.Context, arg UpsertAlbumParams) (Album, error)
 	UpsertArtist(ctx context.Context, arg UpsertArtistParams) (Artist, error)
 	UpsertBook(ctx context.Context, arg UpsertBookParams) (Book, error)
+	// UpsertBookmarkAt is the bulk-import step (tx, seq passed in). LWW: an
+	// existing row (including a tombstone) is overwritten and revived.
+	UpsertBrowserBookmarkAt(ctx context.Context, arg UpsertBrowserBookmarkAtParams) error
 	// == calendar_objects ==
 	UpsertCalendarObject(ctx context.Context, arg UpsertCalendarObjectParams) (CalendarObject, error)
 	UpsertEbookSettings(ctx context.Context, arg UpsertEbookSettingsParams) (EbookSetting, error)
@@ -361,6 +402,10 @@ type Querier interface {
 	// Inserts or updates the reading position for (user_id, document). All mutable
 	// fields are refreshed on conflict so the latest device wins.
 	UpsertReadingProgress(ctx context.Context, arg UpsertReadingProgressParams) (ReadingProgress, error)
+	// Saved items: read-later articles and server-side downloads (internal queue).
+	// Re-save refreshes the client-supplied HTML/cookies (a newer browser state)
+	// but never resets the status.
+	UpsertSavedItem(ctx context.Context, arg UpsertSavedItemParams) (SavedItem, error)
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error
 	UpsertSong(ctx context.Context, arg UpsertSongParams) (Song, error)
 	UpsertSyncSettings(ctx context.Context, arg UpsertSyncSettingsParams) (SyncSetting, error)

@@ -35,6 +35,10 @@ type Config struct {
 	// XAccelEnabled: serve files via nginx X-Accel-Redirect (true) or stream directly
 	// (false, for deployments without nginx and for client tests). Range requests work out of the box.
 	XAccelEnabled bool
+	// SavedMaxDownloadMB caps a single server-side download (saved items); 0 = unlimited.
+	// Generous by default: distro ISOs and archives are the whole point of
+	// server-side downloads (a 2 GB cap rejected a plain Ubuntu server ISO).
+	SavedMaxDownloadMB int
 }
 
 // Load reads configuration from the environment, applying defaults.
@@ -51,6 +55,7 @@ func Load() Config {
 		TrashDays:             getenvInt("TRASH_DAYS", 30),
 		RescanSeconds:         getenvInt("RESCAN_SECONDS", 30),
 		XAccelEnabled:         getenvBool("XACCEL_ENABLED", true),
+		SavedMaxDownloadMB:    getenvInt("SAVED_MAX_DOWNLOAD_MB", 32768),
 	}
 }
 

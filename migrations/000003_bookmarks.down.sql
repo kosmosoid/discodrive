@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS browser_bookmarks CASCADE;
+ALTER TABLE users DROP COLUMN IF EXISTS bookmark_seq;
+ALTER TABLE users DROP COLUMN IF EXISTS bookmark_gc_seq;

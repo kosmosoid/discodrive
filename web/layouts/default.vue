@@ -28,6 +28,7 @@ const nav = computed(() => {
     { to: '/calendar', icon: 'lucide:calendar', label: t('nav.calendar') },
     { to: '/tasks', icon: 'lucide:list-checks', label: t('nav.tasks') },
     { to: '/contacts', icon: 'lucide:contact', label: t('nav.contacts') },
+    { to: '/saved', icon: 'lucide:bookmark', label: t('nav.saved') },
   ]
   if (booksEnabled.value) {
     items.push({ to: '/books-edit', icon: 'lucide:book-open', label: t('nav.books') })

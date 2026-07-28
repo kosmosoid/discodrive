@@ -13,11 +13,13 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
+	"discodrive/internal/bookmarks"
 	"discodrive/internal/db"
 	"discodrive/internal/ebook"
 	"discodrive/internal/music"
 	"discodrive/internal/notify"
 	"discodrive/internal/podcast"
+	"discodrive/internal/saved"
 	"discodrive/internal/storage"
 )
 
@@ -34,6 +36,12 @@ type Config struct {
 
 	PodcastRefreshInterval time.Duration
 	PodcastKeepPerChannel  int
+
+	SavedScanInterval    time.Duration
+	SavedCleanupInterval time.Duration
+
+	BookmarkEnrichInterval time.Duration
+	BookmarkGCInterval     time.Duration
 }
 
 // Default returns sensible defaults; keep/trashDays/rescanSeconds come from config.
@@ -50,6 +58,12 @@ func Default(versionKeep, trashDays, rescanSeconds int) Config {
 
 		PodcastRefreshInterval: 6 * time.Hour,
 		PodcastKeepPerChannel:  5,
+
+		SavedScanInterval:    30 * time.Second,
+		SavedCleanupInterval: 10 * time.Minute,
+
+		BookmarkEnrichInterval: time.Minute,
+		BookmarkGCInterval:     24 * time.Hour,
 	}
 }
 
@@ -59,12 +73,14 @@ type Worker struct {
 	q        *db.Queries
 	notify   *notify.Notifier
 	cfg      Config
-	idx      *music.Indexer // nil if music indexing is not configured
-	ebookIdx *ebook.Indexer // nil if ebook indexing is not configured
+	idx      *music.Indexer     // nil if music indexing is not configured
+	ebookIdx *ebook.Indexer     // nil if ebook indexing is not configured
+	saved    *saved.Service     // nil if saved items are not configured
+	bm       *bookmarks.Service // nil if bookmark sync is not configured
 }
 
-func New(fs *storage.FileService, root string, q *db.Queries, notifier *notify.Notifier, cfg Config, idx *music.Indexer, ebookIdx *ebook.Indexer) *Worker {
-	return &Worker{fs: fs, root: root, q: q, notify: notifier, cfg: cfg, idx: idx, ebookIdx: ebookIdx}
+func New(fs *storage.FileService, root string, q *db.Queries, notifier *notify.Notifier, cfg Config, idx *music.Indexer, ebookIdx *ebook.Indexer, savedSvc *saved.Service, bookmarksSvc *bookmarks.Service) *Worker {
+	return &Worker{fs: fs, root: root, q: q, notify: notifier, cfg: cfg, idx: idx, ebookIdx: ebookIdx, saved: savedSvc, bm: bookmarksSvc}
 }
 
 // Run starts all background jobs and blocks until ctx is cancelled.
@@ -88,6 +104,14 @@ func (w *Worker) Run(ctx context.Context) {
 	}
 	if w.ebookIdx != nil {
 		go w.tick(ctx, w.cfg.RescanInterval, "ebook-scan", w.ebookScan)
+	}
+	if w.saved != nil {
+		go w.tick(ctx, w.cfg.SavedScanInterval, "saved-scan", w.saved.ProcessPending)
+		go w.tick(ctx, w.cfg.SavedCleanupInterval, "saved-cleanup", w.saved.CleanupDownloads)
+	}
+	if w.bm != nil {
+		go w.tick(ctx, w.cfg.BookmarkEnrichInterval, "bookmark-enrich", w.bm.EnrichPending)
+		go w.tick(ctx, w.cfg.BookmarkGCInterval, "bookmark-gc", w.bm.GCTombstones)
 	}
 	w.watch(ctx)
 }

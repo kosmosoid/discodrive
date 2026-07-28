@@ -591,7 +591,7 @@ func (q *Queries) CreateTenant(ctx context.Context, name string) (Tenant, error)
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (tenant_id, email, password_hash, storage_quota, role, must_change_password)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password
+RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq
 `
 
 type CreateUserParams struct {
@@ -627,6 +627,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.TokenVersion,
 		&i.Language,
 		&i.MustChangePassword,
+		&i.BookmarkSeq,
+		&i.BookmarkGcSeq,
 	)
 	return i, err
 }
@@ -1236,7 +1238,7 @@ func (q *Queries) GetTrashedNodeForUser(ctx context.Context, arg GetTrashedNodeF
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password FROM users WHERE email = $1
+SELECT id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -1256,12 +1258,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.TokenVersion,
 		&i.Language,
 		&i.MustChangePassword,
+		&i.BookmarkSeq,
+		&i.BookmarkGcSeq,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password FROM users WHERE id = $1
+SELECT id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -1281,6 +1285,8 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.TokenVersion,
 		&i.Language,
 		&i.MustChangePassword,
+		&i.BookmarkSeq,
+		&i.BookmarkGcSeq,
 	)
 	return i, err
 }
@@ -3035,7 +3041,7 @@ func (q *Queries) UpdateNodeParent(ctx context.Context, arg UpdateNodeParentPara
 
 const updatePassword = `-- name: UpdatePassword :one
 UPDATE users SET password_hash = $2, token_version = token_version + 1, must_change_password = false
-WHERE id = $1 RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password
+WHERE id = $1 RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq
 `
 
 type UpdatePasswordParams struct {
@@ -3062,12 +3068,14 @@ func (q *Queries) UpdatePassword(ctx context.Context, arg UpdatePasswordParams) 
 		&i.TokenVersion,
 		&i.Language,
 		&i.MustChangePassword,
+		&i.BookmarkSeq,
+		&i.BookmarkGcSeq,
 	)
 	return i, err
 }
 
 const updateUser = `-- name: UpdateUser :one
-UPDATE users SET storage_quota = $2, role = $3 WHERE id = $1 RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password
+UPDATE users SET storage_quota = $2, role = $3 WHERE id = $1 RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq
 `
 
 type UpdateUserParams struct {
@@ -3093,6 +3101,8 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.TokenVersion,
 		&i.Language,
 		&i.MustChangePassword,
+		&i.BookmarkSeq,
+		&i.BookmarkGcSeq,
 	)
 	return i, err
 }

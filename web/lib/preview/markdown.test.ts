@@ -52,3 +52,36 @@ describe('markdown preview renderer', () => {
     expect(out).toContain('md-wikilink')
   })
 })
+
+describe('markdown reader mode (allowImages)', () => {
+  const mdImg = configureMarkdown(new MarkdownIt({ html: false, linkify: true }), { allowImages: true })
+
+  it('renders real lazy images without a referrer', () => {
+    const out = mdImg.render('![схема](https://example.com/pic.jpg)')
+    expect(out).toContain('<img src="https://example.com/pic.jpg"')
+    expect(out).toContain('alt="схема"')
+    expect(out).toContain('loading="lazy"')
+    expect(out).toContain('referrerpolicy="no-referrer"')
+  })
+
+  it('escapes hostile src/alt attributes', () => {
+    const out = mdImg.render('![" onerror="alert(1)](https://x/"><script>)')
+    expect(out).not.toContain('"><script>')
+    expect(out).not.toContain('onerror="alert')
+  })
+
+  it('still escapes raw HTML and keeps ![[embeds]] as placeholders', () => {
+    const out = mdImg.render('<img src=x onerror=alert(1)>\n\n![[attachment.png]]')
+    expect(out).not.toContain('<img src=x')
+    expect(out).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    expect(out).toContain('<span class="md-img-placeholder">attachment.png</span>')
+  })
+
+  it('default renderMarkdown still uses placeholders (cached per mode)', async () => {
+    const withImg = await renderMarkdown('![a](https://x/p.png)', { allowImages: true })
+    const plain = await renderMarkdown('![a](https://x/p.png)')
+    expect(withImg).toContain('<img')
+    expect(plain).not.toContain('<img')
+    expect(plain).toContain('md-img-placeholder')
+  })
+})

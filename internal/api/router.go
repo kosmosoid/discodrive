@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"discodrive/internal/auth"
+	"discodrive/internal/bookmarks"
 	"discodrive/internal/caldav"
 	"discodrive/internal/carddav"
 	davpkg "discodrive/internal/dav"
@@ -13,6 +14,7 @@ import (
 	"discodrive/internal/ebook"
 	"discodrive/internal/music"
 	"discodrive/internal/notify"
+	"discodrive/internal/saved"
 	"discodrive/internal/secret"
 	"discodrive/internal/storage"
 )
@@ -34,11 +36,13 @@ type Server struct {
 	feedLimiter  *rateLimiter
 	tagEditor    *music.TagEditor
 	metaEditor   *ebook.MetadataEditor
+	saved        *saved.Service
+	bookmarks    *bookmarks.Service
 }
 
 // NewRouter registers public and authenticated routes.
-func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService, uploads *storage.Uploads, storageRoot string, cipher *secret.Cipher, notifier *notify.Notifier, ui fs.FS, davHandler http.Handler, caldavHandler http.Handler, carddavHandler http.Handler, davSvc *davpkg.Service, xaccel bool, events *EventHub, subsonicHandler http.Handler, opdsHandler http.Handler, kosyncHandler http.Handler, tagEditor *music.TagEditor, metaEditor *ebook.MetadataEditor) http.Handler {
-	s := &Server{auth: authSvc, q: q, files: files, uploads: uploads, storageRoot: storageRoot, cipher: cipher, notify: notifier, dav: davSvc, xaccel: xaccel, events: events, loginLimiter: newLoginLimiter(), pollLimiter: newPollLimiter(), feedLimiter: newLoginLimiter(), tagEditor: tagEditor, metaEditor: metaEditor}
+func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService, uploads *storage.Uploads, storageRoot string, cipher *secret.Cipher, notifier *notify.Notifier, ui fs.FS, davHandler http.Handler, caldavHandler http.Handler, carddavHandler http.Handler, davSvc *davpkg.Service, xaccel bool, events *EventHub, subsonicHandler http.Handler, opdsHandler http.Handler, kosyncHandler http.Handler, tagEditor *music.TagEditor, metaEditor *ebook.MetadataEditor, savedSvc *saved.Service, bookmarksSvc *bookmarks.Service) http.Handler {
+	s := &Server{auth: authSvc, q: q, files: files, uploads: uploads, storageRoot: storageRoot, cipher: cipher, notify: notifier, dav: davSvc, xaccel: xaccel, events: events, loginLimiter: newLoginLimiter(), pollLimiter: newPollLimiter(), feedLimiter: newLoginLimiter(), tagEditor: tagEditor, metaEditor: metaEditor, saved: savedSvc, bookmarks: bookmarksSvc}
 	mux := http.NewServeMux()
 
 	// public
@@ -47,13 +51,13 @@ func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService,
 	mux.HandleFunc("POST /setup/admin", s.rateLimited(s.handleSetupAdmin))
 	mux.HandleFunc("POST /auth/register", s.rateLimited(s.handleRegister))
 	mux.HandleFunc("POST /auth/login", s.rateLimited(s.handleLogin))
-	mux.HandleFunc("POST /auth/mfa/totp", s.rateLimited(s.handleMFATOTP)) // finish 2FA login (carries the MFA-pending token)
-	mux.HandleFunc("POST /auth/webauthn/login/begin", s.rateLimited(s.handleWebAuthnLoginBegin))   // passwordless passkey sign-in
+	mux.HandleFunc("POST /auth/mfa/totp", s.rateLimited(s.handleMFATOTP))                        // finish 2FA login (carries the MFA-pending token)
+	mux.HandleFunc("POST /auth/webauthn/login/begin", s.rateLimited(s.handleWebAuthnLoginBegin)) // passwordless passkey sign-in
 	mux.HandleFunc("POST /auth/webauthn/login/finish", s.rateLimited(s.handleWebAuthnLoginFinish))
 	mux.HandleFunc("POST /auth/device/token", s.authLimited(s.handleDeviceToken))
-	mux.HandleFunc("GET /s/{token}", s.handleLinkDownload)       // public share link
-	mux.HandleFunc("GET /cal/{file}", s.handleCalendarFeed)      // public ICS feed
-	mux.HandleFunc("GET /files/{id}/stream", s.handleStream)     // media stream: auth = purpose=stream token in ?t=
+	mux.HandleFunc("GET /s/{token}", s.handleLinkDownload)   // public share link
+	mux.HandleFunc("GET /cal/{file}", s.handleCalendarFeed)  // public ICS feed
+	mux.HandleFunc("GET /files/{id}/stream", s.handleStream) // media stream: auth = purpose=stream token in ?t=
 	mux.HandleFunc("POST /pair/init", s.rateLimited(s.handlePairInit))
 	mux.HandleFunc("POST /pair/token", s.pollLimited(s.handlePairToken))
 
@@ -191,6 +195,19 @@ func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService,
 	mux.Handle("POST /me/contacts/share", prot(http.HandlerFunc(s.handleShareContacts)))
 	mux.Handle("GET /me/contacts/shares", prot(http.HandlerFunc(s.handleListContactsShares)))
 	mux.Handle("DELETE /me/contacts/shares/{shareId}", prot(http.HandlerFunc(s.handleDeleteContactsShare)))
+	mux.Handle("POST /me/saved", prot(http.HandlerFunc(s.handleSavedCreate)))
+	mux.Handle("GET /me/saved", prot(http.HandlerFunc(s.handleSavedList)))
+	mux.Handle("GET /me/saved/{id}", prot(http.HandlerFunc(s.handleSavedGet)))
+	mux.Handle("POST /me/saved/{id}/retry", prot(http.HandlerFunc(s.handleSavedRetry)))
+	mux.Handle("DELETE /me/saved/{id}", prot(http.HandlerFunc(s.handleSavedDelete)))
+	mux.Handle("GET /me/saved/{id}/content", prot(http.HandlerFunc(s.handleSavedContent)))
+	mux.Handle("GET /me/bookmarks", prot(http.HandlerFunc(s.handleBookmarksList)))
+	mux.Handle("POST /me/bookmarks", prot(http.HandlerFunc(s.handleBookmarkCreate)))
+	mux.Handle("GET /me/bookmarks/changes", prot(http.HandlerFunc(s.handleBookmarksChanges)))
+	mux.Handle("POST /me/bookmarks/bulk", prot(http.HandlerFunc(s.handleBookmarksBulk)))
+	mux.Handle("PATCH /me/bookmarks/{id}", prot(http.HandlerFunc(s.handleBookmarkUpdate)))
+	mux.Handle("DELETE /me/bookmarks/{id}", prot(http.HandlerFunc(s.handleBookmarkDelete)))
+	mux.Handle("GET /me/bookmarks/{id}/favicon", prot(http.HandlerFunc(s.handleBookmarkFavicon)))
 	mux.Handle("POST /me/contacts/import", prot(http.HandlerFunc(s.handleImportContacts)))
 	mux.Handle("GET /me/contacts/export", prot(http.HandlerFunc(s.handleExportContacts)))
 

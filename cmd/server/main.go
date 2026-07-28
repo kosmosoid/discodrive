@@ -22,18 +22,20 @@ import (
 	"discodrive"
 	"discodrive/internal/api"
 	"discodrive/internal/auth"
+	"discodrive/internal/bookmarks"
 	caldavpkg "discodrive/internal/caldav"
 	carddavpkg "discodrive/internal/carddav"
 	"discodrive/internal/config"
 	davpkg "discodrive/internal/dav"
 	"discodrive/internal/db"
 	"discodrive/internal/ebook"
+	"discodrive/internal/kosync"
 	"discodrive/internal/music"
 	"discodrive/internal/notify"
+	"discodrive/internal/opds"
+	"discodrive/internal/saved"
 	"discodrive/internal/secret"
 	"discodrive/internal/storage"
-	"discodrive/internal/kosync"
-	"discodrive/internal/opds"
 	"discodrive/internal/subsonic"
 	webdavpkg "discodrive/internal/webdav"
 	"discodrive/internal/worker"
@@ -191,12 +193,22 @@ func runServer(cfg config.Config) {
 		log.Println("discodrive: no admin yet — open /app/setup to create an administrator")
 	}
 
+	// Saved items (bookmarks / read-later / server-side downloads). Stale
+	// "processing" rows are re-queued before the router and worker start, so the
+	// reset cannot race live processing goroutines.
+	savedSvc := saved.NewService(queries, store, cfg.SavedMaxDownloadMB)
+	if err := savedSvc.RecoverStale(ctx); err != nil {
+		log.Fatalf("discodrive: saved recover: %v", err)
+	}
+	// Browser bookmark sync: server-authoritative tree + favicon enrichment.
+	bookmarksSvc := bookmarks.NewService(pool, queries, store)
+
 	// Background jobs: GC for versions/trash, rescan + fsnotify + music/ebook indexing.
 	musicIdx := music.NewIndexer(queries, cfg.StorageRoot)
 	ebookIdx := ebook.NewIndexer(queries, cfg.StorageRoot)
 	tagEditor := music.NewTagEditor(queries, fileSvc, cfg.StorageRoot)
 	metaEditor := ebook.NewMetadataEditor(queries, cfg.StorageRoot)
-	go worker.New(fileSvc, cfg.StorageRoot, queries, notifier, worker.Default(cfg.VersionKeep, cfg.TrashDays, cfg.RescanSeconds), musicIdx, ebookIdx).Run(ctx)
+	go worker.New(fileSvc, cfg.StorageRoot, queries, notifier, worker.Default(cfg.VersionKeep, cfg.TrashDays, cfg.RescanSeconds), musicIdx, ebookIdx, savedSvc, bookmarksSvc).Run(ctx)
 	// Reap abandoned resumable-upload sessions (idle > 1h) and their staged temp files.
 	go uploads.StartGC(ctx, 5*time.Minute, time.Hour)
 
@@ -221,7 +233,7 @@ func runServer(cfg config.Config) {
 	scriptHashes := inlineScriptHashes(discodrive.WebUI())
 	srv := &http.Server{
 		Addr:              cfg.Addr(),
-		Handler:           securityHeaders(scriptHashes, api.NewRouter(authSvc, queries, fileSvc, uploads, cfg.StorageRoot, cipher, notifier, discodrive.WebUI(), dav, caldavH, carddavH, davSvc, cfg.XAccelEnabled, eventHub, subsonicH, opdsH, kosyncH, tagEditor, metaEditor)),
+		Handler:           securityHeaders(scriptHashes, api.NewRouter(authSvc, queries, fileSvc, uploads, cfg.StorageRoot, cipher, notifier, discodrive.WebUI(), dav, caldavH, carddavH, davSvc, cfg.XAccelEnabled, eventHub, subsonicH, opdsH, kosyncH, tagEditor, metaEditor, savedSvc, bookmarksSvc)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
