@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/img/dd_logo.png" alt="DiscoDrive" width="160">
+  <img src="docs/img/logo.jpg" alt="DiscoDrive" width="100%">
 </p>
 
 # DiscoDrive
@@ -22,7 +22,8 @@ Cross-platform by design: Apple, Windows, Linux and Android.
 
 ### 📁 Files & sync
 
-- A fast, modern **web file manager** — upload, download, create folders, rename, move, with drag-and-drop of whole files *and* folders.
+- A fast, modern **web file manager** — upload, download, create folders, rename, move, with drag-and-drop of files *and* folders.
+- **One-click previews** — images, PDFs, Markdown, syntax-highlighted code, Word documents and Excel spreadsheets open right in the browser, nothing to download.
 - **Versioning** — every file keeps its recent history, so you can roll back a bad edit.
 - **Trash** — deleted files go to a recycle bin and can be restored.
 - **Sharing** — public links: expiring, password-protected, read-only.
@@ -53,6 +54,14 @@ Cross-platform by design: Apple, Windows, Linux and Android.
 - **Podcasts** — subscribe to feeds, download and play episodes, and pick up where you left off with bookmarks.
 - **Built-in tag editor** — edit titles, artists, albums, genres and cover art straight from the web: one track at a time or a whole folder at once.
 
+### ▶️ Player — music and video right in the browser
+
+- Click a track or a movie in your files — and it plays instantly, no downloads, no third-party software.
+- **Stays out of your way** — the player lives in a neat bar at the bottom of the screen: the music keeps playing while you keep sorting your files.
+- **Video theater** — for video, the interface expands into a comfortable full-screen viewing mode.
+- **Floating window** — pop the player out into its own small window on top of other apps (picture-in-picture); it even survives a page reload.
+- **10-band equalizer** with ready-made presets — tune the sound to your headphones or speakers.
+
 ### 📚 Books — your own library
 
 - A personal library for your e-books and comics, ready to read on any device.
@@ -60,6 +69,14 @@ Cross-platform by design: Apple, Windows, Linux and Android.
 - **Every format that matters** — EPUB, FB2, PDF, MOBI, CBZ and CBR, with cover thumbnails and search across the whole catalog.
 - **Reading progress sync** — start a book on one device and continue exactly where you stopped on another.
 - **Metadata editor** — edit titles, authors, series, tags and descriptions from the web: per book or in bulk across a folder.
+
+### 🔖 Saved — bookmarks, articles and downloads
+
+A personal corner for everything you've found on the web and don't want to lose.
+
+- **Bookmarks** — your link collection lives in your cloud and syncs through the browser extension, instead of being locked into one browser.
+- **Read later** — save whole articles: the server keeps a clean text version without ads and banners, and you read it whenever you find the time.
+- **Server-side downloads** — hand the server a link and it fetches the file by itself, straight into your cloud — even while your computer is off.
 
 ### 🛡️ Accounts & security
 
@@ -206,22 +223,19 @@ DiscoDrive is **source-available** under the [PolyForm Noncommercial License 1.0
 - ✅ **Modify it however you like** — as long as you keep the required attribution notice.
 - ❌ **Commercial use is not allowed.**
 
-Need commercial use? A separate commercial license is available — write to [discodrive@kosmosoid.dev](mailto:discodrive@kosmosoid.dev).
-
----
-
-## A hobby project
-
-DiscoDrive is a hobby project, built and maintained by one person. Feedback and suggestions are welcome — write to [discodrive@kosmosoid.dev](mailto:discodrive@kosmosoid.dev).
+Need commercial use? A separate commercial license is available — write to [info@discodrive.app](mailto:info@discodrive.app).
 
 ---
 
 ## ❤️ Support the project
 
-If you enjoy DiscoDrive and want to see it keep growing, you can support its development:
+DiscoDrive is built and maintained by one person. Feedback and suggestions are welcome — write to [info@discodrive.app](mailto:info@discodrive.app).
 
+And if you enjoy DiscoDrive and want to see it keep growing — support the project:
+
+- **[Star it on GitHub](https://github.com/kosmosoid/discodrive)** ⭐
 - **[Ko-fi](https://ko-fi.com/kosmosoid)**
 - **[Boosty](https://boosty.to/kosmosoid/donate)**
 - **[Cryptocurrency](https://nowpayments.io/donation?api_key=7P893T0-48B4KZH-Q6PXBBT-D79X9TK)** — via NOWPayments
 
-Thank you! Every contribution helps the project grow.
+Thank you! Every contribution helps the project move forward.

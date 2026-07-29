@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="img/dd_logo.png" alt="DiscoDrive" width="160">
+  <img src="img/logo.jpg" alt="DiscoDrive" width="100%">
 </p>
 
 # DiscoDrive
@@ -22,7 +22,8 @@ Plattformübergreifend von Grund auf: Apple, Windows, Linux und Android.
 
 ### 📁 Dateien & Sync
 
-- Ein schneller, moderner **Web-Dateimanager** — Hoch- und Herunterladen, Ordner anlegen, Umbenennen, Verschieben, mit Drag-and-drop ganzer Dateien *und* Ordner.
+- Ein schneller, moderner **Web-Dateimanager** — Hoch- und Herunterladen, Ordner anlegen, Umbenennen, Verschieben, mit Drag-and-drop von Dateien *und* Ordnern.
+- **Vorschau mit einem Klick** — Bilder, PDFs, Markdown, Code mit Syntaxhervorhebung, Word-Dokumente und Excel-Tabellen öffnen sich direkt im Browser, ohne dass du etwas herunterladen musst.
 - **Versionierung** — jede Datei behält ihren jüngsten Verlauf, sodass du nach einer missglückten Änderung zur früheren Version zurückkehren kannst.
 - **Papierkorb** — gelöschte Dateien landen im Papierkorb und lassen sich wiederherstellen.
 - **Teilen** — öffentliche Links: ablaufend, passwortgeschützt, nur-lesen.
@@ -53,6 +54,14 @@ Plattformübergreifend von Grund auf: Apple, Windows, Linux und Android.
 - **Podcasts** — abonniere Feeds, lade Episoden herunter, spiele sie ab und fahre mit Lesezeichen genau dort fort, wo du aufgehört hast.
 - **Eingebauter Tag-Editor** — bearbeite Titel, Interpreten, Alben, Genres und Cover direkt im Browser: einzeln pro Track oder für einen ganzen Ordner auf einmal.
 
+### ▶️ Player — Musik und Video direkt im Browser
+
+- Klicke in deinen Dateien auf einen Track oder Film — und er läuft sofort, ohne Download und ohne Zusatzsoftware.
+- **Steht dir nicht im Weg** — der Player lebt in einer dezenten Leiste am unteren Bildschirmrand: die Musik läuft weiter, während du deine Dateien sortierst.
+- **Video-Theater** — bei Videos wächst die Oberfläche zu einem komfortablen Vollbild-Wiedergabemodus heran.
+- **Schwebendes Fenster** — der Player lässt sich in ein eigenes kleines Fenster über anderen Programmen ausdocken (Bild-in-Bild); es übersteht sogar ein Neuladen der Seite.
+- **10-Band-Equalizer** mit fertigen Presets — stimme den Klang auf deine Kopfhörer oder Lautsprecher ab.
+
 ### 📚 Bücher — deine eigene Bibliothek
 
 - Eine persönliche Bibliothek für E-Books und Comics, lesefertig auf jedem Gerät.
@@ -60,6 +69,14 @@ Plattformübergreifend von Grund auf: Apple, Windows, Linux und Android.
 - **Alle wichtigen Formate** — EPUB, FB2, PDF, MOBI, CBZ und CBR, mit Cover-Vorschaubildern und Suche über den gesamten Katalog.
 - **Sync des Lesefortschritts** — beginne ein Buch auf einem Gerät und fahre auf einem anderen genau an derselben Stelle fort.
 - **Metadaten-Editor** — bearbeite Titel, Autoren, Reihen, Tags und Beschreibungen im Browser: pro Buch oder gesammelt für einen ganzen Ordner.
+
+### 🔖 Gespeichert — Lesezeichen, Artikel und Downloads
+
+Eine persönliche Ecke für alles, was du im Netz gefunden hast und nicht verlieren willst.
+
+- **Lesezeichen** — deine Linksammlung liegt in deiner Cloud und synchronisiert sich über die Browser-Erweiterung, statt in einem einzigen Browser eingesperrt zu sein.
+- **Später lesen** — speichere ganze Artikel: der Server bewahrt eine saubere Textfassung ohne Werbung und Banner auf, und du liest sie, wann immer du Zeit hast.
+- **Downloads auf dem Server** — gib dem Server einen Link, und er lädt die Datei selbst herunter, direkt in deine Cloud — sogar wenn dein Rechner aus ist.
 
 ### 🛡️ Konten & Sicherheit
 
@@ -206,22 +223,19 @@ DiscoDrive ist **source-available** unter der [PolyForm Noncommercial License 1.
 - ✅ **Ändern, wie du willst** — solange du den vorgeschriebenen Urheberrechtshinweis beibehältst.
 - ❌ **Kommerzielle Nutzung ist nicht erlaubt.**
 
-Du brauchst kommerzielle Nutzung? Eine separate kommerzielle Lizenz ist verfügbar — schreib an [discodrive@kosmosoid.dev](mailto:discodrive@kosmosoid.dev).
-
----
-
-## Ein Hobbyprojekt
-
-DiscoDrive ist ein Hobbyprojekt, das eine einzige Person baut und pflegt. Rückmeldungen und Vorschläge sind willkommen — schreib an [discodrive@kosmosoid.dev](mailto:discodrive@kosmosoid.dev).
+Du brauchst kommerzielle Nutzung? Eine separate kommerzielle Lizenz ist verfügbar — schreib an [info@discodrive.app](mailto:info@discodrive.app).
 
 ---
 
 ## ❤️ Das Projekt unterstützen
 
-Wenn dir DiscoDrive gefällt und du möchtest, dass es weiterentwickelt wird, kannst du das Projekt unterstützen:
+DiscoDrive wird von einer einzigen Person gebaut und gepflegt. Rückmeldungen und Vorschläge sind willkommen — schreib an [info@discodrive.app](mailto:info@discodrive.app).
 
+Und wenn dir DiscoDrive gefällt und du möchtest, dass es weiter wächst — unterstütze das Projekt:
+
+- **[Gib ihm einen Stern auf GitHub](https://github.com/kosmosoid/discodrive)** ⭐
 - **[Ko-fi](https://ko-fi.com/kosmosoid)**
 - **[Boosty](https://boosty.to/kosmosoid/donate)**
 - **[Kryptowährung](https://nowpayments.io/donation?api_key=7P893T0-48B4KZH-Q6PXBBT-D79X9TK)** — über NOWPayments
 
-Danke! Jeder Beitrag hilft, das Projekt weiterzuentwickeln.
+Danke! Jeder Beitrag bringt das Projekt voran.
