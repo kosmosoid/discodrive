@@ -101,7 +101,15 @@ export function errorAction(probe: ProbeOutcome, alreadyRetried: boolean): Error
 }
 
 // --- Persistence (localStorage) ---
+// localStorage is browser-wide, not account-wide: a snapshot written by one user
+// survives logout and is readable by whoever signs in next. Two invariants keep
+// that safe: (1) the snapshot is stamped with its owner and restore discards it
+// for anyone else; (2) stream URLs are never written — they embed a bearer token
+// (?t=<JWT>, ~1h TTL) that the stream endpoint honours regardless of who is
+// logged in, so persisting one would let the next user play the previous user's
+// file. Playback re-mints URLs via the media endpoint under the current session.
 export interface PersistedPlayer {
+  owner: string // account (email) the snapshot belongs to
   parentId: string // folder the queue was snapshotted from ('' = root)
   items: MediaItem[]
   index: number
@@ -112,23 +120,32 @@ export interface PersistedPlayer {
   shuffle: boolean
 }
 
-const persistVersion = 1
+const persistVersion = 2 // v2: owner stamp, stream URLs stripped
 
 export function serializePlayer(p: PersistedPlayer): string {
-  return JSON.stringify({ v: persistVersion, ...p })
+  return JSON.stringify({
+    v: persistVersion,
+    ...p,
+    items: p.items.map(({ stream_url, ...it }) => it),
+  })
 }
 
-// restorePlayer parses a saved state, dropping anything malformed. Stale stream
-// URLs inside items are fine: playback re-mints via the media endpoint anyway.
-export function restorePlayer(raw: string | null): PersistedPlayer | null {
+// restorePlayer parses a saved state, dropping anything malformed, foreign
+// (owner mismatch) or pre-v2. Restored items carry stream_url: '' — the player
+// re-mints before playing.
+export function restorePlayer(raw: string | null, owner: string): PersistedPlayer | null {
   if (!raw) return null
   try {
     const p = JSON.parse(raw)
     if (p?.v !== persistVersion || !Array.isArray(p.items) || !p.items.length) return null
+    if (typeof p.owner !== 'string' || !p.owner || p.owner !== owner) return null
     if (typeof p.index !== 'number' || p.index < 0 || p.index >= p.items.length) return null
-    const items = p.items.filter((it: any) => it && typeof it.node_id === 'string' && typeof it.name === 'string')
+    const items = p.items
+      .filter((it: any) => it && typeof it.node_id === 'string' && typeof it.name === 'string')
+      .map((it: any): MediaItem => ({ ...it, stream_url: '' }))
     if (!items.length) return null
     return {
+      owner: p.owner,
       parentId: typeof p.parentId === 'string' ? p.parentId : '',
       items,
       index: Math.min(p.index, items.length - 1),

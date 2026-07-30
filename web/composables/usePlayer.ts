@@ -6,7 +6,7 @@ import { computed, ref, watch } from 'vue'
 import {
   buildQueue, indexOfTrack, nextIndex, prevIndex, errorAction,
   serializePlayer, restorePlayer, resumePosition, isVideoMime,
-  type MediaItem, type QueueTrack, type RepeatMode,
+  type MediaItem, type ProbeOutcome, type QueueTrack, type RepeatMode,
 } from '~/lib/player/core'
 import { CoverCache } from '~/lib/player/coverCache'
 
@@ -47,6 +47,37 @@ function useQueueState() {
     // Transient in-bar notice ("skipped: <name>"), cleared automatically.
     notice: useState<string>('player.notice', () => ''),
   }
+}
+
+// Silences playback in this window and empties the visible state. The persisted
+// snapshot is left alone — the popup handoff relies on that.
+function resetWindowState(st: ReturnType<typeof useQueueState>) {
+  if (media) {
+    media.pause()
+    media.removeAttribute('src')
+    media.load()
+  }
+  st.status.value = 'idle'
+  st.theater.value = false
+  st.queue.value = []
+  st.index.value = -1
+  st.coverUrl.value = null
+}
+
+// resetPlayerSession wipes the player on logout / account switch: this window's
+// playback and state, the persisted snapshot, and (via broadcast) the popup and
+// any other tabs. The snapshot carries the previous account's file names and
+// tags — the next account must start from a blank player.
+export function resetPlayerSession() {
+  if (!import.meta.client) return
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+  }
+  restored = false
+  localStorage.removeItem(PERSIST_KEY)
+  resetWindowState(useQueueState())
+  bc?.postMessage('session-cleared')
 }
 
 // Server-side mime detection (Go mime.TypeByExtension) emits a few legacy names
@@ -98,8 +129,10 @@ export function usePlayer() {
 
   // ---- persistence ----
   function writePersist() {
-    if (!st.queue.value.length) return
+    // No session → no owner to stamp the snapshot with; don't write at all.
+    if (!st.queue.value.length || !sess.value.email) return
     localStorage.setItem(PERSIST_KEY, serializePlayer({
+      owner: sess.value.email,
       parentId: st.parentId.value,
       items: st.queue.value.map(({ playable, ...it }) => it),
       index: st.index.value,
@@ -133,8 +166,13 @@ export function usePlayer() {
   function restoreFromStorage(force = false) {
     if (!import.meta.client || (restored && !force)) return
     restored = true
-    const saved = restorePlayer(localStorage.getItem(PERSIST_KEY))
-    if (!saved) return
+    const raw = localStorage.getItem(PERSIST_KEY)
+    const saved = restorePlayer(raw, sess.value.email)
+    if (!saved) {
+      // Another account's snapshot (or malformed/pre-v2): discard it for good.
+      if (raw) localStorage.removeItem(PERSIST_KEY)
+      return
+    }
     st.queue.value = buildQueue(saved.items, browserCanPlay)
     // buildQueue re-sorts; find the saved track again by id.
     const savedId = saved.items[saved.index]?.node_id
@@ -182,6 +220,14 @@ export function usePlayer() {
       bc = new BroadcastChannel('dd-player')
       bc.onmessage = (ev) => {
         const msg = ev.data
+        // Logout in any window kills playback everywhere. The popup closes itself;
+        // its queue is already empty, so the pagehide flush writes nothing back.
+        if (msg === 'session-cleared') {
+          restored = false
+          stopLocal()
+          if (role === 'popup') window.close()
+          return
+        }
         if (role === 'main') {
           // A popup announced itself (on open, or replying to our hello after a
           // main-window reload) → the main window yields.
@@ -216,14 +262,43 @@ export function usePlayer() {
     setTimeout(() => { if (st.notice.value === msg) st.notice.value = '' }, 4000)
   }
 
+  // probeNode asks the single-node media endpoint about a track with the CURRENT
+  // session — used both to recover from mid-playback errors and to mint stream
+  // URLs for restored queues. Deliberately bypasses useApi: its 401 handler
+  // force-logouts, which is wrong for a background stream hiccup.
+  async function probeNode(nodeId: string): Promise<ProbeOutcome> {
+    try {
+      const item = await apiFetch<MediaItem>(mediaEndpoint(st.parentId.value), {
+        query: { node_id: nodeId }, headers: authHeaders(),
+      })
+      return { ok: true, item }
+    } catch (e: any) {
+      return { ok: false, status: e?.response?.status ?? 0 }
+    }
+  }
+
   // ---- core playback ----
   async function loadAndPlay(fromPosition = 0) {
-    const track = current.value
+    let track = current.value
     if (!media || !track) return
     if (!track.playable) {
       showNotice(t('player.skipped_unplayable', { name: track.name }))
       advance(false)
       return
+    }
+    // Restored queues carry no stream URLs (bearer tokens are never persisted) —
+    // mint one under the current session, so the server re-checks access as the
+    // user who is actually logged in now.
+    if (!track.stream_url) {
+      const probe = await probeNode(track.node_id)
+      if (!probe.ok) {
+        showNotice(t('player.skipped_missing', { name: track.name }))
+        advance(false)
+        return
+      }
+      fromPosition = resumePosition(fromPosition, track.version, probe.item.version)
+      track = { ...track, ...probe.item, playable: track.playable }
+      st.queue.value.splice(st.index.value, 1, track)
     }
     st.duration.value = track.duration ?? 0
     st.position.value = fromPosition
@@ -255,21 +330,12 @@ export function usePlayer() {
 
   // Media element errors carry no HTTP status → probe the single-node endpoint
   // with the session. Alive → fresh stream_url (+version check for resume), retry
-  // once. Gone/forbidden → skip. The probe deliberately bypasses useApi: its 401
-  // handler force-logouts, which is wrong for a background stream hiccup.
+  // once. Gone/forbidden → skip.
   async function handleMediaError() {
     const track = current.value
     if (!media || !track || !media.error) return
     const savedPos = st.position.value
-    let probe: { ok: true; item: MediaItem } | { ok: false; status: number }
-    try {
-      const item = await apiFetch<MediaItem>(mediaEndpoint(st.parentId.value), {
-        query: { node_id: track.node_id }, headers: authHeaders(),
-      })
-      probe = { ok: true, item }
-    } catch (e: any) {
-      probe = { ok: false, status: e?.response?.status ?? 0 }
-    }
+    const probe = await probeNode(track.node_id)
     const action = errorAction(probe, retriedCurrent)
     if (action.kind === 'resume') {
       retriedCurrent = true
@@ -361,16 +427,7 @@ export function usePlayer() {
   // stopLocal silences THIS window without forgetting the saved state — used when
   // the popup takes over. close() is the user's explicit X: forget everything.
   function stopLocal() {
-    if (media) {
-      media.pause()
-      media.removeAttribute('src')
-      media.load()
-    }
-    st.status.value = 'idle'
-    st.theater.value = false
-    st.queue.value = []
-    st.index.value = -1
-    st.coverUrl.value = null
+    resetWindowState(st)
   }
 
   function close() {

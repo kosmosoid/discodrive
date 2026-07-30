@@ -89,7 +89,9 @@ describe('errorAction (mid-playback policy)', () => {
 })
 
 describe('persistence', () => {
+  const owner = 'alice@example.com'
   const state = {
+    owner,
     parentId: 'p1',
     items: [item('a.mp3'), item('b.mp3')],
     index: 1,
@@ -99,22 +101,40 @@ describe('persistence', () => {
     repeat: 'all' as const,
     shuffle: true,
   }
+  // Restored items always come back with stream_url: '' — URLs are re-minted.
+  const restoredState = { ...state, items: state.items.map((it) => ({ ...it, stream_url: '' })) }
 
-  it('round-trips', () => {
-    expect(restorePlayer(serializePlayer(state))).toEqual(state)
+  it('round-trips (minus stream URLs)', () => {
+    expect(restorePlayer(serializePlayer(state), owner)).toEqual(restoredState)
+  })
+
+  it('never writes stream URLs: they embed bearer tokens that outlive the session', () => {
+    expect(serializePlayer(state)).not.toContain('stream_url')
+  })
+
+  it('rejects a snapshot stamped for another account', () => {
+    expect(restorePlayer(serializePlayer(state), 'bob@example.com')).toBeNull()
+    expect(restorePlayer(serializePlayer(state), '')).toBeNull()
+    // An unstamped snapshot never matches, even an empty expected owner.
+    expect(restorePlayer(JSON.stringify({ ...state, v: 2, owner: '' }), '')).toBeNull()
+  })
+
+  it('rejects pre-v2 snapshots (unstamped, may carry stream URLs)', () => {
+    const { owner: _o, ...v1 } = state
+    expect(restorePlayer(JSON.stringify({ v: 1, ...v1 }), owner)).toBeNull()
   })
 
   it('rejects garbage, empty and out-of-range states', () => {
-    expect(restorePlayer(null)).toBeNull()
-    expect(restorePlayer('not json')).toBeNull()
-    expect(restorePlayer('{"v":1,"items":[]}')).toBeNull()
-    expect(restorePlayer(JSON.stringify({ v: 999, ...state }))).toBeNull()
-    expect(restorePlayer(JSON.stringify({ ...state, v: 1, index: 5 }))).toBeNull()
+    expect(restorePlayer(null, owner)).toBeNull()
+    expect(restorePlayer('not json', owner)).toBeNull()
+    expect(restorePlayer('{"v":2,"items":[]}', owner)).toBeNull()
+    expect(restorePlayer(JSON.stringify({ v: 999, ...state }), owner)).toBeNull()
+    expect(restorePlayer(JSON.stringify({ ...state, v: 2, index: 5 }), owner)).toBeNull()
   })
 
   it('drops malformed items and clamps the index', () => {
-    const raw = JSON.stringify({ v: 1, ...state, items: [state.items[0], { junk: true }], index: 1 })
-    const got = restorePlayer(raw)
+    const raw = JSON.stringify({ v: 2, ...state, items: [state.items[0], { junk: true }], index: 1 })
+    const got = restorePlayer(raw, owner)
     expect(got?.items).toHaveLength(1)
     expect(got?.index).toBe(0)
   })
