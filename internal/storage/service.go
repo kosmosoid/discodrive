@@ -426,6 +426,21 @@ type PushResult struct {
 //
 // baseVersion == nil → no version check (plain web upload, last-write semantics).
 func (s *FileService) Push(ctx context.Context, userID string, parentID *string, name string, baseVersion *int64, device string, r io.Reader) (PushResult, error) {
+	return s.PushWithMeta(ctx, userID, parentID, name, baseVersion, device, r, PushMeta{})
+}
+
+// PushMeta carries optional client-supplied metadata. The zero value means "the client
+// told us nothing", which is exactly the behaviour Push has always had.
+type PushMeta struct {
+	// ModifiedAt is when the content itself last changed on the client. Zero leaves the
+	// node dated with server time, i.e. when it was uploaded. Version snapshots keep
+	// server time either way: they record when a revision reached us, not when it was
+	// authored, and that ordering is what history browsing relies on.
+	ModifiedAt time.Time
+}
+
+// PushWithMeta is Push plus client-supplied metadata; see Push for the sync semantics.
+func (s *FileService) PushWithMeta(ctx context.Context, userID string, parentID *string, name string, baseVersion *int64, device string, r io.Reader, meta PushMeta) (PushResult, error) {
 	if err := validateName(name); err != nil {
 		return PushResult{}, err
 	}
@@ -461,6 +476,7 @@ func (s *FileService) Push(ctx context.Context, userID string, parentID *string,
 		node, err := qtx.CreateNode(ctx, db.CreateNodeParams{
 			UserID: ownerUUID, ParentID: parentUUID, Name: name, IsDir: false,
 			Size: int8val(size), ContentHash: text(sha), DiskPath: text(rel), Mime: text(detectMime(name)),
+			ModifiedAt: tsval(meta.ModifiedAt),
 		})
 		if err != nil {
 			return PushResult{}, mapInsertErr(err)
@@ -481,6 +497,7 @@ func (s *FileService) Push(ctx context.Context, userID string, parentID *string,
 		}
 		node, err := qtx.UpdateNodeContent(ctx, db.UpdateNodeContentParams{
 			ID: existing.ID, Size: int8val(size), ContentHash: text(sha), Mime: text(detectMime(name)),
+			ModifiedAt: tsval(meta.ModifiedAt),
 		})
 		if err != nil {
 			return PushResult{}, err
@@ -499,6 +516,7 @@ func (s *FileService) Push(ctx context.Context, userID string, parentID *string,
 		UserID: ownerUUID, ParentID: parentUUID, Name: cname,
 		Size: int8val(size), ContentHash: text(sha), DiskPath: text(crel),
 		Mime: text(detectMime(name)), ConflictOf: existing.ID,
+		ModifiedAt: tsval(meta.ModifiedAt), // the conflict copy is the client's file, so it keeps the client's date
 	})
 	if err != nil {
 		return PushResult{}, mapInsertErr(err)
@@ -828,6 +846,15 @@ func baseName(rel string) string {
 func text(s string) pgtype.Text   { return pgtype.Text{String: s, Valid: true} }
 func int8val(n int64) pgtype.Int8 { return pgtype.Int8{Int64: n, Valid: true} }
 
+// tsval turns an optional client timestamp into a nullable column value. The zero time
+// means "not supplied", and the query COALESCEs NULL to now().
+func tsval(t time.Time) pgtype.Timestamptz {
+	if t.IsZero() {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: t, Valid: true}
+}
+
 // tmpName returns a unique relative path for staging an upload (outside the tree mirror).
 func tmpName() string {
 	b := make([]byte, 16)
@@ -1047,6 +1074,11 @@ func userRelToDisk(userID, rel string) string { return userID + "/" + rel }
 // PushByPath performs a sync-push by user-relative path: resolves/creates the directory
 // chain and uploads content via Push (conflict-aware by baseVersion).
 func (s *FileService) PushByPath(ctx context.Context, userID, relPath string, baseVersion *int64, r io.Reader) (PushResult, error) {
+	return s.PushByPathWithMeta(ctx, userID, relPath, baseVersion, r, PushMeta{})
+}
+
+// PushByPathWithMeta is PushByPath plus client-supplied metadata.
+func (s *FileService) PushByPathWithMeta(ctx context.Context, userID, relPath string, baseVersion *int64, r io.Reader, meta PushMeta) (PushResult, error) {
 	rel := strings.Trim(filepath.ToSlash(relPath), "/")
 	if rel == "" {
 		return PushResult{}, ErrNotFound
@@ -1056,7 +1088,7 @@ func (s *FileService) PushByPath(ctx context.Context, userID, relPath string, ba
 	if err != nil {
 		return PushResult{}, err
 	}
-	return s.Push(ctx, userID, parentID, name, baseVersion, "desktop", r)
+	return s.PushWithMeta(ctx, userID, parentID, name, baseVersion, "desktop", r, meta)
 }
 
 // ensureDirChain idempotently creates the directory chain for dir (user-relative) and

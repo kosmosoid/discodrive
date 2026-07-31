@@ -63,21 +63,41 @@ func toUserDTO(u db.User) userDTO {
 }
 
 type nodeDTO struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	IsDir   bool   `json:"is_dir"`
-	Size    *int64 `json:"size"`
-	Version int64  `json:"version"`
-	Mime    string `json:"mime,omitempty"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	IsDir bool   `json:"is_dir"`
+	Size  *int64 `json:"size"`
+	// ModifiedAt is the content's own date when a client supplied one at upload time,
+	// otherwise the time we received it.
+	ModifiedAt time.Time `json:"modified_at"`
+	Version    int64     `json:"version"`
+	Mime       string    `json:"mime,omitempty"`
+	// ContentHash lets a client ask "is this file already here, byte for byte?" straight
+	// from the listing, instead of reconstructing it from the /sync/changes feed.
+	ContentHash string `json:"content_hash,omitempty"`
 }
 
 func toNodeDTO(n db.Node) nodeDTO {
-	d := nodeDTO{ID: db.UUIDString(n.ID), Name: n.Name, IsDir: n.IsDir, Version: n.Version, Mime: n.Mime.String}
+	d := nodeDTO{ID: db.UUIDString(n.ID), Name: n.Name, IsDir: n.IsDir, Version: n.Version,
+		Mime: n.Mime.String, ContentHash: n.ContentHash.String}
 	if n.Size.Valid {
 		s := n.Size.Int64
 		d.Size = &s
 	}
+	if n.ModifiedAt.Valid {
+		d.ModifiedAt = n.ModifiedAt.Time
+	}
 	return d
+}
+
+// clientModTime reads an optional client-supplied content date in RFC3339. An empty value
+// means "not supplied" and leaves the server date in place; a malformed one is an error,
+// because silently dating a file "now" is worse than telling the client it got it wrong.
+func clientModTime(v string) (time.Time, error) {
+	if v == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339, v)
 }
 
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -465,7 +485,13 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		baseVersion = &n
 	}
-	res, err := s.files.Push(r.Context(), auth.UserID(r.Context()), parent, name, baseVersion, r.FormValue("device"), file)
+	mtime, err := clientModTime(r.FormValue("modified_at"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid modified_at, expected RFC3339")
+		return
+	}
+	res, err := s.files.PushWithMeta(r.Context(), auth.UserID(r.Context()), parent, name, baseVersion,
+		r.FormValue("device"), file, storage.PushMeta{ModifiedAt: mtime})
 	if err != nil {
 		writeStorageErr(w, err)
 		return
@@ -722,15 +748,22 @@ func (s *Server) serveFileContent(w http.ResponseWriter, r *http.Request, name, 
 // add up to it. Older clients that omit it keep working, without that check.
 func (s *Server) handleUploadInit(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ParentID *string `json:"parent_id"`
-		Name     string  `json:"name"`
-		Size     int64   `json:"size"`
+		ParentID   *string `json:"parent_id"`
+		Name       string  `json:"name"`
+		Size       int64   `json:"size"`
+		ModifiedAt string  `json:"modified_at"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	id, err := s.uploads.Init(auth.UserID(r.Context()), req.ParentID, req.Name, req.Size)
+	mtime, err := clientModTime(req.ModifiedAt)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid modified_at, expected RFC3339")
+		return
+	}
+	id, err := s.uploads.Init(auth.UserID(r.Context()), req.ParentID, req.Name, req.Size,
+		storage.PushMeta{ModifiedAt: mtime})
 	if err != nil {
 		writeStorageErr(w, err)
 		return

@@ -73,19 +73,24 @@ SELECT d.* FROM devices d
 JOIN users u ON u.id = d.user_id
 WHERE u.email = $1 AND d.kind = 'webdav' AND d.secret_hash IS NOT NULL;
 
+-- modified_at is the content's own modification time when the client supplies one, so a
+-- photo from 2019 uploaded today reads as 2019. NULL falls back to now(), which is what
+-- every client that sends nothing keeps getting.
 -- name: CreateNode :one
 INSERT INTO nodes (
     user_id, parent_id, name, is_dir, size,
-    content_hash, disk_path, mime, is_vault, modified_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    content_hash, disk_path, mime, is_vault, modified_by, modified_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+    COALESCE(sqlc.narg(modified_at)::timestamptz, now()))
 RETURNING *;
 
 -- A conflict copy is a separate file node.
 -- name: CreateConflictNode :one
 INSERT INTO nodes (
     user_id, parent_id, name, is_dir, size, content_hash, disk_path, mime,
-    is_conflict_loser, conflict_of
-) VALUES ($1, $2, $3, false, $4, $5, $6, $7, true, $8)
+    is_conflict_loser, conflict_of, modified_at
+) VALUES ($1, $2, $3, false, $4, $5, $6, $7, true, $8,
+    COALESCE(sqlc.narg(modified_at)::timestamptz, now()))
 RETURNING *;
 
 -- name: GetNode :one
@@ -142,7 +147,8 @@ RETURNING *;
 
 -- name: UpdateNodeContent :one
 UPDATE nodes
-SET size = $2, content_hash = $3, mime = $4, version = version + 1, modified_at = now(), modified_by = $5
+SET size = $2, content_hash = $3, mime = $4, version = version + 1,
+    modified_at = COALESCE(sqlc.narg(modified_at)::timestamptz, now()), modified_by = $5
 WHERE id = $1
 RETURNING *;
 

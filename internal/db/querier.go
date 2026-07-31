@@ -121,6 +121,9 @@ type Querier interface {
 	CreateDesktopDevice(ctx context.Context, arg CreateDesktopDeviceParams) (Device, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
 	CreateInternetRadioStation(ctx context.Context, arg CreateInternetRadioStationParams) (InternetRadioStation, error)
+	// modified_at is the content's own modification time when the client supplies one, so a
+	// photo from 2019 uploaded today reads as 2019. NULL falls back to now(), which is what
+	// every client that sends nothing keeps getting.
 	CreateNode(ctx context.Context, arg CreateNodeParams) (Node, error)
 	// Device pairing (device authorization flow, step 3.1.2).
 	CreatePairing(ctx context.Context, arg CreatePairingParams) (DevicePairing, error)

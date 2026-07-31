@@ -41,7 +41,7 @@ func TestChunkRetryAfterPartialWriteMustNotDuplicateBytes(t *testing.T) {
 
 	chunk := []byte(strings.Repeat("A", 4096))
 
-	id, err := u.Init("u1", nil, "big.bin", int64(len(chunk)))
+	id, err := u.Init("u1", nil, "big.bin", int64(len(chunk)), storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCompleteRejectsShortUpload(t *testing.T) {
 	st := storage.NewLocalDisk(t.TempDir())
 	u := storage.NewUploads(st, nil) // the size check runs before Push, so no FileService needed
 
-	id, err := u.Init("u1", nil, "big.bin", 8192)
+	id, err := u.Init("u1", nil, "big.bin", 8192, storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestChunkRejectsOvershoot(t *testing.T) {
 	st := storage.NewLocalDisk(t.TempDir())
 	u := storage.NewUploads(st, nil)
 
-	id, err := u.Init("u1", nil, "big.bin", 4096)
+	id, err := u.Init("u1", nil, "big.bin", 4096, storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}

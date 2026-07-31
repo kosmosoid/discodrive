@@ -52,7 +52,13 @@ export function useUploads() {
           method: 'POST',
           // size lets the server reject a Complete whose chunks don't add up to the
           // whole file, instead of publishing a short upload as if it were finished.
-          body: { parent_id: t.parentId, name: t.name, size: t.total },
+          // modified_at keeps the file's own date instead of dating it "just now".
+          body: {
+            parent_id: t.parentId,
+            name: t.name,
+            size: t.total,
+            modified_at: ctl.file.lastModified ? new Date(ctl.file.lastModified).toISOString() : undefined,
+          },
         })
         t.uploadId = init.upload_id
       }

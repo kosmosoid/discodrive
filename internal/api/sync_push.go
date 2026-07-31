@@ -7,6 +7,7 @@ import (
 
 	"discodrive/internal/auth"
 	"discodrive/internal/db"
+	"discodrive/internal/storage"
 )
 
 // scopedPushPath prepends the user's configured sync folder to a client rel-path, but ONLY
@@ -51,7 +52,13 @@ func (s *Server) handleSyncPutFile(w http.ResponseWriter, r *http.Request) {
 		}
 		base = &n
 	}
-	res, err := s.files.PushByPath(r.Context(), auth.UserID(r.Context()), rel, base, r.Body)
+	mtime, err := clientModTime(r.Header.Get("X-Modified-At"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid X-Modified-At, expected RFC3339")
+		return
+	}
+	res, err := s.files.PushByPathWithMeta(r.Context(), auth.UserID(r.Context()), rel, base, r.Body,
+		storage.PushMeta{ModifiedAt: mtime})
 	if err != nil {
 		writeStorageErr(w, err)
 		return

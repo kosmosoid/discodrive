@@ -12,7 +12,7 @@ func TestUploadAbort(t *testing.T) {
 	st := storage.NewLocalDisk(t.TempDir())
 	u := storage.NewUploads(st, nil) // Init/Chunk/Status/Abort do not use FileService
 
-	id, err := u.Init("u1", nil, "f.txt", 0)
+	id, err := u.Init("u1", nil, "f.txt", 0, storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}

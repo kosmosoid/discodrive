@@ -21,14 +21,15 @@ var (
 )
 
 type uploadSession struct {
-	mu        sync.Mutex
-	userID    string
-	parentID  *string
-	name      string
-	tmpRel    string
-	total     int64 // size the client declared at Init; 0 = not declared
-	nextChunk int
-	lastTouch time.Time
+	mu         sync.Mutex
+	userID     string
+	parentID   *string
+	name       string
+	tmpRel     string
+	total      int64     // size the client declared at Init; 0 = not declared
+	modifiedAt time.Time // content date the client declared at Init; zero = use server time
+	nextChunk  int
+	lastTouch  time.Time
 }
 
 // Uploads manages resumable chunked uploads: sessions are held in memory,
@@ -48,7 +49,9 @@ func NewUploads(st Storage, fs *FileService) *Uploads {
 // Init creates an upload session and returns its ID. total is the full size the client
 // intends to send; it is what Complete checks the assembled file against. Pass 0 when the
 // size is genuinely unknown — the session then works as before, with no size check.
-func (u *Uploads) Init(userID string, parentID *string, name string, total int64) (string, error) {
+// meta carries optional client metadata (its zero value means none) and is applied by
+// Complete, since that is where the file is actually published.
+func (u *Uploads) Init(userID string, parentID *string, name string, total int64, meta PushMeta) (string, error) {
 	if err := validateName(name); err != nil {
 		return "", err
 	}
@@ -58,7 +61,7 @@ func (u *Uploads) Init(userID string, parentID *string, name string, total int64
 	id := randomHex()
 	u.mu.Lock()
 	u.m[id] = &uploadSession{userID: userID, parentID: parentID, name: name,
-		tmpRel: ".uploads/" + id, total: total, lastTouch: time.Now()}
+		tmpRel: ".uploads/" + id, total: total, modifiedAt: meta.ModifiedAt, lastTouch: time.Now()}
 	u.mu.Unlock()
 	return id, nil
 }
@@ -221,7 +224,8 @@ func (u *Uploads) Complete(ctx context.Context, id, userID string) (PushResult, 
 		s.mu.Unlock()
 		return PushResult{}, err
 	}
-	res, err := u.fs.Push(ctx, s.userID, s.parentID, s.name, nil, "", f)
+	res, err := u.fs.PushWithMeta(ctx, s.userID, s.parentID, s.name, nil, "", f,
+		PushMeta{ModifiedAt: s.modifiedAt})
 	_ = f.Close()
 	if err != nil {
 		s.mu.Unlock()

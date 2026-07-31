@@ -36,7 +36,7 @@ func (b *blockingReader) Read(p []byte) (int, error) {
 func TestUploads_GCDoesNotBlockBehindInFlightChunk(t *testing.T) {
 	u := storage.NewUploads(storage.NewLocalDisk(t.TempDir()), nil)
 
-	id, err := u.Init("u1", nil, "f.txt", 0)
+	id, err := u.Init("u1", nil, "f.txt", 0, storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestUploads_GCDoesNotBlockBehindInFlightChunk(t *testing.T) {
 
 	initDone := make(chan struct{})
 	go func() {
-		if _, err := u.Init("u1", nil, "g.txt", 0); err != nil {
+		if _, err := u.Init("u1", nil, "g.txt", 0, storage.PushMeta{}); err != nil {
 			t.Errorf("init during in-flight chunk: %v", err)
 		}
 		close(initDone)
@@ -73,7 +73,7 @@ func TestUploads_GCDoesNotBlockBehindInFlightChunk(t *testing.T) {
 func TestUploads_GCSkipsActivelyUploadingSession(t *testing.T) {
 	u := storage.NewUploads(storage.NewLocalDisk(t.TempDir()), nil)
 
-	id, err := u.Init("u1", nil, "f.txt", 0)
+	id, err := u.Init("u1", nil, "f.txt", 0, storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}

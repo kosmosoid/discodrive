@@ -330,20 +330,22 @@ func (q *Queries) CreateCalendarWithComponents(ctx context.Context, arg CreateCa
 const createConflictNode = `-- name: CreateConflictNode :one
 INSERT INTO nodes (
     user_id, parent_id, name, is_dir, size, content_hash, disk_path, mime,
-    is_conflict_loser, conflict_of
-) VALUES ($1, $2, $3, false, $4, $5, $6, $7, true, $8)
+    is_conflict_loser, conflict_of, modified_at
+) VALUES ($1, $2, $3, false, $4, $5, $6, $7, true, $8,
+    COALESCE($9::timestamptz, now()))
 RETURNING id, user_id, parent_id, name, is_dir, size, content_hash, disk_path, mime, is_vault, version, modified_at, modified_by, deleted_at, created_at, is_conflict_loser, conflict_of
 `
 
 type CreateConflictNodeParams struct {
-	UserID      pgtype.UUID `json:"user_id"`
-	ParentID    pgtype.UUID `json:"parent_id"`
-	Name        string      `json:"name"`
-	Size        pgtype.Int8 `json:"size"`
-	ContentHash pgtype.Text `json:"content_hash"`
-	DiskPath    pgtype.Text `json:"disk_path"`
-	Mime        pgtype.Text `json:"mime"`
-	ConflictOf  pgtype.UUID `json:"conflict_of"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	ParentID    pgtype.UUID        `json:"parent_id"`
+	Name        string             `json:"name"`
+	Size        pgtype.Int8        `json:"size"`
+	ContentHash pgtype.Text        `json:"content_hash"`
+	DiskPath    pgtype.Text        `json:"disk_path"`
+	Mime        pgtype.Text        `json:"mime"`
+	ConflictOf  pgtype.UUID        `json:"conflict_of"`
+	ModifiedAt  pgtype.Timestamptz `json:"modified_at"`
 }
 
 // A conflict copy is a separate file node.
@@ -357,6 +359,7 @@ func (q *Queries) CreateConflictNode(ctx context.Context, arg CreateConflictNode
 		arg.DiskPath,
 		arg.Mime,
 		arg.ConflictOf,
+		arg.ModifiedAt,
 	)
 	var i Node
 	err := row.Scan(
@@ -438,24 +441,29 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 const createNode = `-- name: CreateNode :one
 INSERT INTO nodes (
     user_id, parent_id, name, is_dir, size,
-    content_hash, disk_path, mime, is_vault, modified_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    content_hash, disk_path, mime, is_vault, modified_by, modified_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+    COALESCE($11::timestamptz, now()))
 RETURNING id, user_id, parent_id, name, is_dir, size, content_hash, disk_path, mime, is_vault, version, modified_at, modified_by, deleted_at, created_at, is_conflict_loser, conflict_of
 `
 
 type CreateNodeParams struct {
-	UserID      pgtype.UUID `json:"user_id"`
-	ParentID    pgtype.UUID `json:"parent_id"`
-	Name        string      `json:"name"`
-	IsDir       bool        `json:"is_dir"`
-	Size        pgtype.Int8 `json:"size"`
-	ContentHash pgtype.Text `json:"content_hash"`
-	DiskPath    pgtype.Text `json:"disk_path"`
-	Mime        pgtype.Text `json:"mime"`
-	IsVault     bool        `json:"is_vault"`
-	ModifiedBy  pgtype.UUID `json:"modified_by"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	ParentID    pgtype.UUID        `json:"parent_id"`
+	Name        string             `json:"name"`
+	IsDir       bool               `json:"is_dir"`
+	Size        pgtype.Int8        `json:"size"`
+	ContentHash pgtype.Text        `json:"content_hash"`
+	DiskPath    pgtype.Text        `json:"disk_path"`
+	Mime        pgtype.Text        `json:"mime"`
+	IsVault     bool               `json:"is_vault"`
+	ModifiedBy  pgtype.UUID        `json:"modified_by"`
+	ModifiedAt  pgtype.Timestamptz `json:"modified_at"`
 }
 
+// modified_at is the content's own modification time when the client supplies one, so a
+// photo from 2019 uploaded today reads as 2019. NULL falls back to now(), which is what
+// every client that sends nothing keeps getting.
 func (q *Queries) CreateNode(ctx context.Context, arg CreateNodeParams) (Node, error) {
 	row := q.db.QueryRow(ctx, createNode,
 		arg.UserID,
@@ -468,6 +476,7 @@ func (q *Queries) CreateNode(ctx context.Context, arg CreateNodeParams) (Node, e
 		arg.Mime,
 		arg.IsVault,
 		arg.ModifiedBy,
+		arg.ModifiedAt,
 	)
 	var i Node
 	err := row.Scan(
@@ -2919,17 +2928,19 @@ func (q *Queries) UndeleteSubtree(ctx context.Context, arg UndeleteSubtreeParams
 
 const updateNodeContent = `-- name: UpdateNodeContent :one
 UPDATE nodes
-SET size = $2, content_hash = $3, mime = $4, version = version + 1, modified_at = now(), modified_by = $5
+SET size = $2, content_hash = $3, mime = $4, version = version + 1,
+    modified_at = COALESCE($6::timestamptz, now()), modified_by = $5
 WHERE id = $1
 RETURNING id, user_id, parent_id, name, is_dir, size, content_hash, disk_path, mime, is_vault, version, modified_at, modified_by, deleted_at, created_at, is_conflict_loser, conflict_of
 `
 
 type UpdateNodeContentParams struct {
-	ID          pgtype.UUID `json:"id"`
-	Size        pgtype.Int8 `json:"size"`
-	ContentHash pgtype.Text `json:"content_hash"`
-	Mime        pgtype.Text `json:"mime"`
-	ModifiedBy  pgtype.UUID `json:"modified_by"`
+	ID          pgtype.UUID        `json:"id"`
+	Size        pgtype.Int8        `json:"size"`
+	ContentHash pgtype.Text        `json:"content_hash"`
+	Mime        pgtype.Text        `json:"mime"`
+	ModifiedBy  pgtype.UUID        `json:"modified_by"`
+	ModifiedAt  pgtype.Timestamptz `json:"modified_at"`
 }
 
 func (q *Queries) UpdateNodeContent(ctx context.Context, arg UpdateNodeContentParams) (Node, error) {
@@ -2939,6 +2950,7 @@ func (q *Queries) UpdateNodeContent(ctx context.Context, arg UpdateNodeContentPa
 		arg.ContentHash,
 		arg.Mime,
 		arg.ModifiedBy,
+		arg.ModifiedAt,
 	)
 	var i Node
 	err := row.Scan(
