@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"sync"
@@ -14,6 +15,9 @@ import (
 var (
 	ErrUploadNotFound  = errors.New("upload session not found")
 	ErrChunkOutOfOrder = errors.New("chunk out of order")
+	// ErrUploadSize is returned when the staged bytes do not add up to the total the
+	// client declared at Init — either Complete was called early or a chunk overshot.
+	ErrUploadSize = errors.New("upload size mismatch")
 )
 
 type uploadSession struct {
@@ -22,6 +26,7 @@ type uploadSession struct {
 	parentID  *string
 	name      string
 	tmpRel    string
+	total     int64 // size the client declared at Init; 0 = not declared
 	nextChunk int
 	lastTouch time.Time
 }
@@ -40,14 +45,20 @@ func NewUploads(st Storage, fs *FileService) *Uploads {
 	return &Uploads{m: make(map[string]*uploadSession), st: st, fs: fs}
 }
 
-// Init creates an upload session and returns its ID.
-func (u *Uploads) Init(userID string, parentID *string, name string) (string, error) {
+// Init creates an upload session and returns its ID. total is the full size the client
+// intends to send; it is what Complete checks the assembled file against. Pass 0 when the
+// size is genuinely unknown — the session then works as before, with no size check.
+func (u *Uploads) Init(userID string, parentID *string, name string, total int64) (string, error) {
 	if err := validateName(name); err != nil {
 		return "", err
 	}
+	if total < 0 {
+		return "", ErrUploadSize
+	}
 	id := randomHex()
 	u.mu.Lock()
-	u.m[id] = &uploadSession{userID: userID, parentID: parentID, name: name, tmpRel: ".uploads/" + id, lastTouch: time.Now()}
+	u.m[id] = &uploadSession{userID: userID, parentID: parentID, name: name,
+		tmpRel: ".uploads/" + id, total: total, lastTouch: time.Now()}
 	u.mu.Unlock()
 	return id, nil
 }
@@ -138,8 +149,34 @@ func (u *Uploads) Chunk(id, userID string, n int, r io.Reader) (int, error) {
 		_, _ = io.Copy(io.Discard, r)
 		return s.nextChunk, ErrChunkOutOfOrder
 	}
-	if err := u.st.Append(s.tmpRel, r); err != nil {
+	// Append writes straight into the staging file, so a body that dies mid-chunk leaves a
+	// partial tail behind. nextChunk does not advance, and the client retries this very
+	// chunk (useUploads.ts does, up to MAX_RETRIES) — appending the full chunk after the
+	// orphaned bytes. Roll back to the pre-chunk length so the retry starts clean.
+	before, err := u.st.Size(s.tmpRel)
+	if err != nil {
 		return s.nextChunk, err
+	}
+	if err := u.st.Append(s.tmpRel, r); err != nil {
+		if terr := u.st.Truncate(s.tmpRel, before); terr != nil {
+			return s.nextChunk, terr
+		}
+		return s.nextChunk, err
+	}
+	// A chunk that pushes the staging file past the declared total means the client is
+	// sending something other than the file it announced; refuse it rather than let
+	// Complete publish the mismatch.
+	if s.total > 0 {
+		after, err := u.st.Size(s.tmpRel)
+		if err != nil {
+			return s.nextChunk, err
+		}
+		if after > s.total {
+			if terr := u.st.Truncate(s.tmpRel, before); terr != nil {
+				return s.nextChunk, terr
+			}
+			return s.nextChunk, ErrUploadSize
+		}
 	}
 	s.nextChunk++
 	return s.nextChunk, nil
@@ -165,6 +202,20 @@ func (u *Uploads) Complete(ctx context.Context, id, userID string) (PushResult, 
 		return PushResult{}, err
 	}
 	s.mu.Lock()
+	// Verify before publishing: without this the session happily pushes whatever chunks
+	// happened to land, and Push computes content_hash over those bytes — so a short or
+	// duplicated upload is self-consistent and no later integrity check can spot it.
+	if s.total > 0 {
+		staged, err := u.st.Size(s.tmpRel)
+		if err != nil {
+			s.mu.Unlock()
+			return PushResult{}, err
+		}
+		if staged != s.total {
+			s.mu.Unlock()
+			return PushResult{}, fmt.Errorf("%w: staged %d of %d declared bytes", ErrUploadSize, staged, s.total)
+		}
+	}
 	f, err := u.st.Open(s.tmpRel)
 	if err != nil {
 		s.mu.Unlock()

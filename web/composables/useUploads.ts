@@ -50,7 +50,9 @@ export function useUploads() {
       if (!t.uploadId) {
         const init = await request<{ upload_id: string }>('/upload/init', {
           method: 'POST',
-          body: { parent_id: t.parentId, name: t.name },
+          // size lets the server reject a Complete whose chunks don't add up to the
+          // whole file, instead of publishing a short upload as if it were finished.
+          body: { parent_id: t.parentId, name: t.name, size: t.total },
         })
         t.uploadId = init.upload_id
       }

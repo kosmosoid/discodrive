@@ -36,6 +36,11 @@ type Storage interface {
 	Copy(srcRel, dstRel string) error
 	// Append appends data to the end of a file (creates it if absent). Used for chunks.
 	Append(rel string, r io.Reader) error
+	// Size returns the current size of a file, or 0 if it does not exist yet.
+	Size(rel string) (int64, error)
+	// Truncate shrinks a file to size. Used to roll a failed chunk append back to the
+	// length the staging file had before it started.
+	Truncate(rel string, size int64) error
 	// Remove deletes a path recursively (used by GC; not called on soft-delete).
 	Remove(rel string) error
 	// Open opens a file for reading.
@@ -160,6 +165,36 @@ func (d *LocalDisk) Append(rel string, r io.Reader) error {
 		return err
 	}
 	return f.Sync()
+}
+
+func (d *LocalDisk) Size(rel string) (int64, error) {
+	full, err := d.abs(rel)
+	if err != nil {
+		return 0, err
+	}
+	fi, err := os.Stat(full)
+	if os.IsNotExist(err) {
+		return 0, nil // no chunk staged yet
+	}
+	if err != nil {
+		return 0, err
+	}
+	return fi.Size(), nil
+}
+
+func (d *LocalDisk) Truncate(rel string, size int64) error {
+	full, err := d.abs(rel)
+	if err != nil {
+		return err
+	}
+	if size == 0 {
+		// Nothing was staged before this chunk: os.Truncate would fail on a file that
+		// Append never got round to creating.
+		if _, err := os.Stat(full); os.IsNotExist(err) {
+			return nil
+		}
+	}
+	return os.Truncate(full, size)
 }
 
 func (d *LocalDisk) Remove(rel string) error {

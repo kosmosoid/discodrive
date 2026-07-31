@@ -275,6 +275,8 @@ func writeStorageErr(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "invalid access parameters")
 	case errors.Is(err, storage.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not found")
+	case errors.Is(err, storage.ErrUploadSize):
+		writeError(w, http.StatusBadRequest, "upload is incomplete: staged bytes do not match the declared size")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}
@@ -715,17 +717,20 @@ func (s *Server) serveFileContent(w http.ResponseWriter, r *http.Request, name, 
 	http.ServeContent(w, r, name, fi.ModTime(), f)
 }
 
-// POST /upload/init {parent_id?, name} → initiates a resumable upload session
+// POST /upload/init {parent_id?, name, size?} → initiates a resumable upload session.
+// size is the file's full length: Complete refuses to publish unless the staged chunks
+// add up to it. Older clients that omit it keep working, without that check.
 func (s *Server) handleUploadInit(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ParentID *string `json:"parent_id"`
 		Name     string  `json:"name"`
+		Size     int64   `json:"size"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	id, err := s.uploads.Init(auth.UserID(r.Context()), req.ParentID, req.Name)
+	id, err := s.uploads.Init(auth.UserID(r.Context()), req.ParentID, req.Name, req.Size)
 	if err != nil {
 		writeStorageErr(w, err)
 		return
@@ -746,6 +751,8 @@ func (s *Server) handleUploadChunk(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "upload session not found")
 	case errors.Is(err, storage.ErrChunkOutOfOrder):
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "chunk out of order", "next_chunk": next})
+	case errors.Is(err, storage.ErrUploadSize):
+		writeError(w, http.StatusBadRequest, "chunk exceeds the declared file size")
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "internal error")
 	default:
