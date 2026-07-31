@@ -19,7 +19,24 @@ type ctxKey int
 const (
 	ctxUserKey ctxKey = iota
 	ctxDeviceKey
+	ctxPutLenKey
 )
+
+// WithDeclaredLength returns a context carrying the declared body length of an upload
+// (the request's Content-Length, or -1 when the client did not state one). Handler
+// installs it for every PUT; writeFile.Close uses it to refuse a body that did not
+// arrive in full instead of publishing a truncated file.
+func WithDeclaredLength(ctx context.Context, n int64) context.Context {
+	return context.WithValue(ctx, ctxPutLenKey, n)
+}
+
+// declaredLength reads the value set by WithDeclaredLength; -1 means "unknown".
+func declaredLength(ctx context.Context) int64 {
+	if n, ok := ctx.Value(ctxPutLenKey).(int64); ok {
+		return n
+	}
+	return -1
+}
 
 // FileSystem is a webdav.FileSystem backed by the sync core, scoped to a single user.
 type FileSystem = webdav.FileSystem
@@ -139,7 +156,7 @@ func (f *fsImpl) OpenFile(ctx context.Context, name string, flag int, _ os.FileM
 			return nil, err
 		}
 		return &writeFile{ctx: ctx, svc: f.svc, userID: f.userID, deviceID: deviceOf(ctx),
-			parentID: parentID, name: leaf, tmp: tmp}, nil
+			parentID: parentID, name: leaf, tmp: tmp, expect: declaredLength(ctx)}, nil
 	}
 	if name == "/" {
 		return f.dir(ctx, nodeInfo{name: "/", dir: true}, "")

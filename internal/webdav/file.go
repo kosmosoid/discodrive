@@ -3,6 +3,7 @@ package webdav
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"mime"
@@ -145,9 +146,15 @@ type writeFile struct {
 	parentID *string
 	name     string
 	tmp      *os.File
+	expect   int64 // declared Content-Length; -1 when the client did not state one
+	written  int64 // bytes actually buffered so far
 }
 
-func (w *writeFile) Write(p []byte) (int, error)         { return w.tmp.Write(p) }
+func (w *writeFile) Write(p []byte) (int, error) {
+	n, err := w.tmp.Write(p)
+	w.written += int64(n)
+	return n, err
+}
 func (w *writeFile) Read([]byte) (int, error)            { return 0, os.ErrInvalid }
 func (w *writeFile) Seek(o int64, wh int) (int64, error) { return w.tmp.Seek(o, wh) }
 func (w *writeFile) Readdir(int) ([]fs.FileInfo, error)  { return nil, errNotDir }
@@ -156,6 +163,19 @@ func (w *writeFile) Stat() (fs.FileInfo, error) {
 }
 func (w *writeFile) Close() error {
 	defer func() { _ = w.tmp.Close(); _ = os.Remove(w.tmp.Name()) }()
+	// x/net/webdav's handlePut calls Close() even when copying the request body FAILED
+	// (webdav.go: closeErr is taken before copyErr is inspected) — and this Close is what
+	// publishes the file. Committing unconditionally turns any mid-transfer failure into a
+	// silently truncated file that looks complete: it appears in listings at its short
+	// length, and content_hash is computed over the bytes that did arrive, so no later
+	// integrity check can tell it apart from a genuine upload. Verify before publishing.
+	if err := w.ctx.Err(); err != nil {
+		return fmt.Errorf("upload of %q aborted after %d bytes: %w", w.name, w.written, err)
+	}
+	if w.expect >= 0 && w.written != w.expect {
+		return fmt.Errorf("upload of %q incomplete: received %d of %d declared bytes",
+			w.name, w.written, w.expect)
+	}
 	if _, err := w.tmp.Seek(0, io.SeekStart); err != nil {
 		return err
 	}

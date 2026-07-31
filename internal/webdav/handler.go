@@ -40,6 +40,13 @@ func Handler(svc *storage.FileService, prefix string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		uid := UserID(r.Context())
 		normalizeDestinationHost(r)
+		// Record what the client promised to send so the write path can refuse a PUT whose
+		// body did not arrive in full rather than publishing the partial bytes (see
+		// writeFile.Close). ContentLength is -1 for chunked bodies — then the length check
+		// is skipped and only the context-cancellation guard applies.
+		if r.Method == http.MethodPut {
+			r = r.WithContext(WithDeclaredLength(r.Context(), r.ContentLength))
+		}
 		h := &webdav.Handler{
 			Prefix:     prefix,
 			FileSystem: NewFileSystem(svc, uid),
