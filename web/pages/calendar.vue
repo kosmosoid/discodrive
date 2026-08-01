@@ -99,9 +99,9 @@ function localToIso(v: string): string { return v ? new Date(v).toISOString() : 
 function isoToDate(iso: string): string {
   if (!iso) return ''; const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`
 }
-function dateToIso(v: string): string { return v ? new Date(v + 'T00:00:00').toISOString() : '' }
+function dateToIso(v: string): string { return v ? `${v}T00:00:00.000Z` : '' }
 function formatEventTime(iso: string): string {
   const d = new Date(iso); const pad = (n: number) => String(n).padStart(2, '0')
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`

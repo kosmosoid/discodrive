@@ -257,11 +257,20 @@ func eventToForm(uid string, cal *ical.Calendar) eventForm {
 		f.Location = propText(comp, ical.PropLocation)
 		f.Description = propText(comp, ical.PropDescription)
 		f.AllDay = isAllDay(comp)
+		// An all-day boundary is a bare date; pin it to midnight UTC so that reading
+		// the form in another zone cannot move it to the neighbouring day.
+		stamp := func(t time.Time) string {
+			if f.AllDay {
+				y, m, d := t.Date()
+				return time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)
+			}
+			return t.Format(time.RFC3339)
+		}
 		if st, e := ev.DateTimeStart(loc); e == nil {
-			f.Start = st.Format(time.RFC3339)
+			f.Start = stamp(st)
 		}
 		if en, e := ev.DateTimeEnd(loc); e == nil {
-			f.End = en.Format(time.RFC3339)
+			f.End = stamp(en)
 		}
 		if rr := propText(comp, ical.PropRecurrenceRule); rr != "" {
 			f.Freq = parseFreq(rr)
@@ -398,11 +407,17 @@ func applyEventForm(ev *ical.Event, f eventForm) {
 		en = st.Add(time.Hour)
 	}
 	if f.AllDay {
+		// DATE values carry no zone: the calendar date of the value as written is the date.
 		ev.Props.SetDate(ical.PropDateTimeStart, st)
 		ev.Props.SetDate(ical.PropDateTimeEnd, en)
 	} else {
-		ev.Props.SetDateTime(ical.PropDateTimeStart, st)
-		ev.Props.SetDateTime(ical.PropDateTimeEnd, en)
+		// UTC, always. go-ical writes a non-UTC time as TZID=<Location.String()>, and
+		// time.Parse gives an offset-only value an unnamed zone — the result is
+		// "TZID=:20260805T100000": an empty TZID and a floating time that every client,
+		// this server included, then reads in its own zone. Relative VALARM triggers
+		// hang off DTSTART, so the reminders drift (or never fire) along with it.
+		ev.Props.SetDateTime(ical.PropDateTimeStart, st.UTC())
+		ev.Props.SetDateTime(ical.PropDateTimeEnd, en.UTC())
 	}
 	// RRULE from a preset — use SetRecurrenceRule (RECUR type). SetText must NOT be used:
 	// it escapes ';' as '\;' and adds VALUE=TEXT, causing RecurrenceSet to fail to parse the rule.

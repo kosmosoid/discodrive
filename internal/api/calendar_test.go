@@ -156,3 +156,54 @@ func TestBuiltRecurringExpands(t *testing.T) {
 		t.Fatalf("expected 3 occurrences (15/16/17), got %d", len(occ))
 	}
 }
+
+// A start carrying a numeric offset must be written as UTC. go-ical would otherwise
+// emit "DTSTART;TZID=:20260805T100000" — an empty TZID and a floating time that every
+// client reads in its own zone, taking the relative VALARM trigger with it.
+func TestEventTimesAreWrittenInUTC(t *testing.T) {
+	cal := ical.NewCalendar()
+	cal.Props.SetText(ical.PropProductID, "-//t//EN")
+	cal.Props.SetText(ical.PropVersion, "2.0")
+	ev := ical.NewEvent()
+	ev.Props.SetText(ical.PropUID, "u1")
+	ev.Props.SetDateTime(ical.PropDateTimeStamp, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC))
+	applyEventForm(ev, eventForm{
+		Summary: "Meeting", Start: "2026-08-05T10:00:00+06:00", End: "2026-08-05T11:00:00+06:00", Alarm: "15",
+	})
+	cal.Children = append(cal.Children, ev.Component)
+	var b strings.Builder
+	_ = ical.NewEncoder(&b).Encode(cal)
+	out := b.String()
+	if strings.Contains(out, "TZID=") {
+		t.Fatalf("a timed event must not carry TZID:\n%s", out)
+	}
+	if !strings.Contains(out, "DTSTART:20260805T040000Z") || !strings.Contains(out, "DTEND:20260805T050000Z") {
+		t.Fatalf("expected the UTC form of the times:\n%s", out)
+	}
+}
+
+// An all-day event keeps its calendar date, and the form reports it as midnight UTC
+// so that reading it in another zone cannot move it to the neighbouring day.
+func TestAllDayKeepsItsDate(t *testing.T) {
+	cal := ical.NewCalendar()
+	cal.Props.SetText(ical.PropProductID, "-//t//EN")
+	cal.Props.SetText(ical.PropVersion, "2.0")
+	ev := ical.NewEvent()
+	ev.Props.SetText(ical.PropUID, "u2")
+	ev.Props.SetDateTime(ical.PropDateTimeStamp, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC))
+	applyEventForm(ev, eventForm{
+		Summary: "Vacation", Start: "2026-08-10T00:00:00Z", End: "2026-08-12T00:00:00Z", AllDay: true,
+	})
+	cal.Children = append(cal.Children, ev.Component)
+	var b strings.Builder
+	_ = ical.NewEncoder(&b).Encode(cal)
+	out := b.String()
+	if !strings.Contains(out, "DTSTART;VALUE=DATE:20260810") {
+		t.Fatalf("expected a DATE start of 20260810:\n%s", out)
+	}
+	cal2, _ := ical.NewDecoder(strings.NewReader(out)).Decode()
+	f := eventToForm("u2", cal2)
+	if !f.AllDay || f.Start != "2026-08-10T00:00:00Z" || f.End != "2026-08-12T00:00:00Z" {
+		t.Fatalf("all-day form: %+v", f)
+	}
+}
