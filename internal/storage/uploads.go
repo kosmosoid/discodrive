@@ -10,6 +10,11 @@ import (
 	"maps"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"discodrive/internal/db"
+	"discodrive/internal/quota"
 )
 
 var (
@@ -40,10 +45,25 @@ type Uploads struct {
 	m  map[string]*uploadSession
 	st Storage
 	fs *FileService
+	// quota bounds what a session may stage; nil = no limits configured. Held here
+	// rather than reached through fs, which is nil in tests of the session bookkeeping.
+	quota *quota.Checker
 }
 
 func NewUploads(st Storage, fs *FileService) *Uploads {
 	return &Uploads{m: make(map[string]*uploadSession), st: st, fs: fs}
+}
+
+// SetQuota installs the quota checker. Called once at startup.
+func (u *Uploads) SetQuota(c *quota.Checker) { u.quota = c }
+
+// uid parses a session's user ID for the quota queries.
+func uid(userID string) (pgtype.UUID, error) {
+	id, err := db.ParseUUID(userID)
+	if err != nil {
+		return pgtype.UUID{}, ErrNotFound
+	}
+	return id, nil
 }
 
 // Init creates an upload session and returns its ID. total is the full size the client
@@ -51,17 +71,29 @@ func NewUploads(st Storage, fs *FileService) *Uploads {
 // size is genuinely unknown — the session then works as before, with no size check.
 // meta carries optional client metadata (its zero value means none) and is applied by
 // Complete, since that is where the file is actually published.
-func (u *Uploads) Init(userID string, parentID *string, name string, total int64, meta PushMeta) (string, error) {
+func (u *Uploads) Init(ctx context.Context, userID string, parentID *string, name string, total int64, meta PushMeta) (string, error) {
 	if err := validateName(name); err != nil {
 		return "", err
 	}
 	if total < 0 {
 		return "", ErrUploadSize
 	}
+	// Refuse a file that cannot possibly fit before the client starts sending it —
+	// the per-chunk check would otherwise only stop it once the quota is full.
+	if u.quota != nil {
+		owner, err := uid(userID)
+		if err != nil {
+			return "", err
+		}
+		if err := u.quota.Check(ctx, owner, total); err != nil {
+			return "", err
+		}
+	}
 	id := randomHex()
 	u.mu.Lock()
 	u.m[id] = &uploadSession{userID: userID, parentID: parentID, name: name,
-		tmpRel: ".uploads/" + id, total: total, modifiedAt: meta.ModifiedAt, lastTouch: time.Now()}
+		tmpRel: ".uploads/" + id, total: total,
+		modifiedAt: meta.ModifiedAt, lastTouch: time.Now()}
 	u.mu.Unlock()
 	return id, nil
 }
@@ -135,7 +167,7 @@ func (u *Uploads) get(id, userID string) (*uploadSession, error) {
 
 // Chunk appends chunk n. Returns the next expected chunk number.
 // An already-accepted chunk is ignored (idempotent); a future one → ErrChunkOutOfOrder.
-func (u *Uploads) Chunk(id, userID string, n int, r io.Reader) (int, error) {
+func (u *Uploads) Chunk(ctx context.Context, id, userID string, n int, r io.Reader) (int, error) {
 	s, err := u.get(id, userID)
 	if err != nil {
 		return 0, err
@@ -160,7 +192,22 @@ func (u *Uploads) Chunk(id, userID string, n int, r io.Reader) (int, error) {
 	if err != nil {
 		return s.nextChunk, err
 	}
-	if err := u.st.Append(s.tmpRel, r); err != nil {
+	// Staged bytes live in .uploads/, outside the node tree, so the quota sum cannot see
+	// them yet — they are passed as reserved so each chunk is measured against what is
+	// left after the ones already staged. Init has usually caught an oversized file
+	// already; this stops the case Init cannot judge, an upload with no declared size,
+	// and a quota that filled up while the upload was running.
+	limited := io.Reader(r)
+	if u.quota != nil {
+		owner, err := uid(s.userID)
+		if err != nil {
+			return s.nextChunk, err
+		}
+		if limited, err = u.quota.ReaderReserving(ctx, owner, before, r); err != nil {
+			return s.nextChunk, err
+		}
+	}
+	if err := u.st.Append(s.tmpRel, limited); err != nil {
 		if terr := u.st.Truncate(s.tmpRel, before); terr != nil {
 			return s.nextChunk, terr
 		}

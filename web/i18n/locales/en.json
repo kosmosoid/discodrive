@@ -98,6 +98,7 @@
   },
   "trash": {
     "title": "Trash",
+    "occupies": "occupies {size} — still counted against your quota",
     "empty": "Trash is empty",
     "purge_all": "Empty trash",
     "deleted_at": "deleted {date}",
@@ -440,6 +441,8 @@
     "disk_free": "Free",
     "of": "of",
     "users_count": "Users",
+    "storage_limit": "Storage limit",
+    "quota_assignable": "{size} left to assign",
     "col_email": "Email",
     "col_role": "Role",
     "col_used": "Used",
@@ -501,6 +504,11 @@
     "resume": "Resume",
     "cancel": "Cancel",
     "paused": "paused"
+  },
+  "storage": {
+    "title": "Storage",
+    "free": "{size} free",
+    "no_limit": "no limit"
   },
   "index": {
     "loading": "Loading…"

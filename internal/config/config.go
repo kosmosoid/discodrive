@@ -39,7 +39,26 @@ type Config struct {
 	// Generous by default: distro ISOs and archives are the whole point of
 	// server-side downloads (a 2 GB cap rejected a plain Ubuntu server ISO).
 	SavedMaxDownloadMB int
+	// StorageTotalGB is how much of the disk discodrive may occupy in total; 0 = the
+	// whole disk. It bounds both what admins can hand out (the sum of user quotas)
+	// and what users can actually write, so the service cannot fill a disk it shares
+	// with other things.
+	StorageTotalGB int
+	// DefaultUserQuotaGB is the quota given to a newly created user when none is
+	// specified; 0 = no quota (only the server-wide cap applies). Existing users are
+	// never touched by this.
+	DefaultUserQuotaGB int
 }
+
+// GiB is the byte multiplier for the *_GB settings: they are binary gigabytes,
+// matching how the admin UI and formatBytes present sizes.
+const GiB = int64(1) << 30
+
+// StorageTotalBytes returns the server-wide storage cap in bytes (0 = unlimited).
+func (c Config) StorageTotalBytes() int64 { return int64(c.StorageTotalGB) * GiB }
+
+// DefaultUserQuotaBytes returns the default per-user quota in bytes (0 = none).
+func (c Config) DefaultUserQuotaBytes() int64 { return int64(c.DefaultUserQuotaGB) * GiB }
 
 // Load reads configuration from the environment, applying defaults.
 func Load() Config {
@@ -56,6 +75,8 @@ func Load() Config {
 		RescanSeconds:         getenvInt("RESCAN_SECONDS", 30),
 		XAccelEnabled:         getenvBool("XACCEL_ENABLED", true),
 		SavedMaxDownloadMB:    getenvInt("SAVED_MAX_DOWNLOAD_MB", 32768),
+		StorageTotalGB:        getenvInt("STORAGE_TOTAL_GB", 0),
+		DefaultUserQuotaGB:    getenvInt("DEFAULT_USER_QUOTA_GB", 0),
 	}
 }
 

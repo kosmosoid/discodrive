@@ -23,15 +23,96 @@ UPDATE users SET language = $2 WHERE id = $1;
 -- name: ListUserIDs :many
 SELECT id FROM users;
 
--- Users with used space (sum of live file sizes) — for the admin dashboard.
+-- Users with used space — for the admin dashboard, and the definition the quota check
+-- runs against (kept identical in UserStorageUsage, TotalStorageUsage and
+-- RefreshStorageUsed). "Used" is what the user actually occupies on disk: live files,
+-- files still in the trash (they are deleted for real only after TRASH_DAYS), version
+-- snapshots, and downloaded podcast episodes (which live outside the file tree, in
+-- podcasts/<user>/). Anything narrower would let a user park unlimited data past their
+-- quota in the trash, in .versions, or in a podcast subscription.
 -- name: ListUsersWithUsage :many
 SELECT u.id, u.email, u.role, u.storage_quota, u.created_at,
-       COALESCE((
+       (COALESCE((
            SELECT SUM(n.size) FROM nodes n
-           WHERE n.user_id = u.id AND n.deleted_at IS NULL AND n.is_dir = false
-       ), 0)::bigint AS used
+           WHERE n.user_id = u.id AND n.is_dir = false
+       ), 0) + COALESCE((
+           SELECT SUM(v.size) FROM file_versions v
+           JOIN nodes vn ON vn.id = v.node_id
+           WHERE vn.user_id = u.id
+       ), 0) + COALESCE((
+           SELECT SUM(e.size) FROM podcast_episodes e
+           WHERE e.user_id = u.id AND e.disk_path IS NOT NULL
+       ), 0))::bigint AS used
 FROM users u
 ORDER BY u.created_at;
+
+-- Used space of a single user, same definition as ListUsersWithUsage. This is the
+-- number the quota check runs against on every write.
+-- name: UserStorageUsage :one
+SELECT (COALESCE((
+           SELECT SUM(n.size) FROM nodes n
+           WHERE n.user_id = sqlc.arg(user_id) AND n.is_dir = false
+       ), 0) + COALESCE((
+           SELECT SUM(v.size) FROM file_versions v
+           JOIN nodes vn ON vn.id = v.node_id
+           WHERE vn.user_id = sqlc.arg(user_id)
+       ), 0) + COALESCE((
+           SELECT SUM(e.size) FROM podcast_episodes e
+           WHERE e.user_id = sqlc.arg(user_id) AND e.disk_path IS NOT NULL
+       ), 0))::bigint AS used;
+
+-- The part of a user's occupied space that emptying the trash would release: trashed
+-- files plus the version history that goes with them. Files sit there for TRASH_DAYS,
+-- so this is the fastest space a user can free by themselves.
+-- name: TrashStorageUsage :one
+SELECT (COALESCE((
+           SELECT SUM(n.size) FROM nodes n
+           WHERE n.user_id = sqlc.arg(user_id) AND n.is_dir = false AND n.deleted_at IS NOT NULL
+       ), 0) + COALESCE((
+           SELECT SUM(v.size) FROM file_versions v
+           JOIN nodes vn ON vn.id = v.node_id
+           WHERE vn.user_id = sqlc.arg(user_id) AND vn.deleted_at IS NOT NULL
+       ), 0))::bigint AS used;
+
+-- Used space across all users — checked against the server-wide cap (STORAGE_TOTAL_GB).
+-- name: TotalStorageUsage :one
+SELECT (COALESCE((
+           SELECT SUM(size) FROM nodes WHERE is_dir = false
+       ), 0) + COALESCE((
+           SELECT SUM(size) FROM file_versions
+       ), 0) + COALESCE((
+           SELECT SUM(size) FROM podcast_episodes WHERE disk_path IS NOT NULL
+       ), 0))::bigint AS used;
+
+-- Sum of the quotas handed out to users, optionally excluding one (the user being
+-- edited). NULL exclude_id excludes nobody. Used to keep the handed-out total within
+-- the server-wide cap.
+-- name: SumAssignedQuotas :one
+SELECT COALESCE(SUM(storage_quota), 0)::bigint AS assigned FROM users
+WHERE storage_quota IS NOT NULL
+  AND id IS DISTINCT FROM sqlc.narg(exclude_id)::uuid;
+
+-- Refreshes the users.storage_used cache from the live totals. The column feeds the
+-- "90% of quota" notification job only — the quota check itself always computes usage
+-- fresh, so a stale cache can never let a write through.
+-- name: RefreshStorageUsed :exec
+UPDATE users u SET storage_used = fresh.used
+FROM (
+    SELECT usr.id,
+           (COALESCE((
+               SELECT SUM(n.size) FROM nodes n
+               WHERE n.user_id = usr.id AND n.is_dir = false
+           ), 0) + COALESCE((
+               SELECT SUM(v.size) FROM file_versions v
+               JOIN nodes vn ON vn.id = v.node_id
+               WHERE vn.user_id = usr.id
+           ), 0) + COALESCE((
+               SELECT SUM(e.size) FROM podcast_episodes e
+               WHERE e.user_id = usr.id AND e.disk_path IS NOT NULL
+           ), 0))::bigint AS used
+    FROM users usr
+) AS fresh
+WHERE u.id = fresh.id AND u.storage_used <> fresh.used;
 
 -- name: UpdateUser :one
 UPDATE users SET storage_quota = $2, role = $3 WHERE id = $1 RETURNING *;
@@ -237,11 +318,26 @@ WHERE cl.user_id = $1 AND cl.seq > $2 AND n.disk_path LIKE sqlc.arg(prefix)::tex
 ORDER BY cl.seq
 LIMIT sqlc.arg(lim);
 
--- name: InsertFileVersion :one
+-- A version is snapshotted once, when the content that carried it is replaced. The
+-- conflict clause covers nodes written under the old scheme, whose current version was
+-- already snapshotted: re-snapshotting the same version is the same bytes, so keep the
+-- row that is there instead of duplicating it.
+-- name: InsertFileVersion :exec
 INSERT INTO file_versions (
     node_id, version, content_hash, disk_path, size, device_id, is_conflict_loser
 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING *;
+ON CONFLICT (node_id, version) DO NOTHING;
+
+-- Snapshots that duplicate a node's live content: leftovers from the scheme where a
+-- push snapshotted what it had just written. The cutoff keeps the job away from nodes
+-- being written right now, whose new snapshot is not committed yet.
+-- name: ListRedundantVersionSnapshots :many
+SELECT fv.id, fv.disk_path FROM file_versions fv
+JOIN nodes n ON n.id = fv.node_id
+WHERE fv.version >= n.version AND n.modified_at < sqlc.arg(modified_before);
+
+-- name: DeleteFileVersion :exec
+DELETE FROM file_versions WHERE id = $1;
 
 -- name: ListFileVersions :many
 SELECT * FROM file_versions WHERE node_id = $1 ORDER BY version DESC;

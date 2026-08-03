@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -95,15 +96,22 @@ func FetchFeedUnsafe(ctx context.Context, client *http.Client, feedURL string) (
 
 // DownloadTo validates the URL then downloads it to destPath.
 func DownloadTo(ctx context.Context, srcURL, destPath string) (size int64, contentType, suffix string, err error) {
+	return DownloadToLimit(ctx, srcURL, destPath, 0)
+}
+
+// DownloadToLimit is DownloadTo bounded by max bytes (0 = unbounded). A feed states no
+// reliable size for its enclosures, so an episode can only be held to a limit while it
+// streams; crossing it aborts the transfer and leaves nothing behind.
+func DownloadToLimit(ctx context.Context, srcURL, destPath string, max int64) (size int64, contentType, suffix string, err error) {
 	if err := ValidateURL(srcURL); err != nil {
 		return 0, "", "", err
 	}
-	return DownloadToUnsafe(ctx, guardedClient(), srcURL, destPath)
+	return DownloadToUnsafe(ctx, guardedClient(), srcURL, destPath, max)
 }
 
 // DownloadToUnsafe downloads srcURL to destPath using the given client WITHOUT the SSRF guard.
 // WARNING: for tests only — callers are responsible for ensuring the URL is safe.
-func DownloadToUnsafe(ctx context.Context, client *http.Client, srcURL, destPath string) (size int64, contentType, suffix string, err error) {
+func DownloadToUnsafe(ctx context.Context, client *http.Client, srcURL, destPath string, max int64) (size int64, contentType, suffix string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srcURL, nil)
 	if err != nil {
 		return 0, "", "", err
@@ -124,9 +132,22 @@ func DownloadToUnsafe(ctx context.Context, client *http.Client, srcURL, destPath
 		return 0, "", "", err
 	}
 	defer out.Close()
-	n, err := io.Copy(out, resp.Body)
+	body := io.Reader(resp.Body)
+	if max > 0 && max < math.MaxInt64 {
+		// One byte past the limit is enough to tell "fits exactly" from "too big".
+		// max+1 must not overflow: an "unlimited" ceiling arrives here as MaxInt64,
+		// and a negative limit makes io.LimitReader hand back an empty body.
+		body = io.LimitReader(resp.Body, max+1)
+	}
+	n, err := io.Copy(out, body)
 	if err != nil {
 		return 0, "", "", err
+	}
+	if max > 0 && n > max {
+		// The partial file would otherwise sit on disk as an unplayable episode that
+		// still fills the quota (status stays "error", so nothing points at it).
+		_ = os.Remove(destPath)
+		return 0, "", "", fmt.Errorf("podcast: %s exceeds the space left (%d bytes)", srcURL, max)
 	}
 	contentType = resp.Header.Get("Content-Type")
 	// suffix is derived from destPath's extension (caller-chosen), not the remote resource.

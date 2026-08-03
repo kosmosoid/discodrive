@@ -1,16 +1,19 @@
 package webdav
 
 import (
+	"errors"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"sync"
 
 	"golang.org/x/net/webdav"
 
+	"discodrive/internal/quota"
 	"discodrive/internal/storage"
 )
 
@@ -45,6 +48,23 @@ func Handler(svc *storage.FileService, prefix string) http.Handler {
 		// writeFile.Close). ContentLength is -1 for chunked bodies — then the length check
 		// is skipped and only the context-cancellation guard applies.
 		if r.Method == http.MethodPut {
+			// Refuse a file that does not fit before reading the body: WebDAV clients
+			// (Finder, rclone, the desktop sync) always declare a length, and 507 with
+			// a reason is a far better answer than letting them push gigabytes only to
+			// fail at commit time. A chunked PUT has no declared length — the quota
+			// limiter inside Push still stops it, the client just sees a plain failure.
+			// macOS junk files (._*, .DS_Store) are accepted and thrown away, so they
+			// cost nothing and must not be refused when the quota is full.
+			if r.ContentLength > 0 && !isMacJunk(path.Base(r.URL.Path)) {
+				if err := svc.CheckQuota(r.Context(), uid, r.ContentLength); errors.Is(err, quota.ErrExceeded) {
+					http.Error(w, err.Error(), http.StatusInsufficientStorage)
+					return
+				} else if err != nil {
+					log.Printf("webdav: quota check %s: %v", r.URL.Path, err)
+					http.Error(w, "internal error", http.StatusInternalServerError)
+					return
+				}
+			}
 			r = r.WithContext(WithDeclaredLength(r.Context(), r.ContentLength))
 		}
 		h := &webdav.Handler{

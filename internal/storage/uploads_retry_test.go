@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"strings"
@@ -41,17 +42,17 @@ func TestChunkRetryAfterPartialWriteMustNotDuplicateBytes(t *testing.T) {
 
 	chunk := []byte(strings.Repeat("A", 4096))
 
-	id, err := u.Init("u1", nil, "big.bin", int64(len(chunk)), storage.PushMeta{})
+	id, err := u.Init(context.Background(), "u1", nil, "big.bin", int64(len(chunk)), storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
 
 	// The connection drops after 1000 of the 4096 bytes.
-	if _, err := u.Chunk(id, "u1", 0, &failingReader{data: chunk, cut: 1000}); err == nil {
+	if _, err := u.Chunk(context.Background(), id, "u1", 0, &failingReader{data: chunk, cut: 1000}); err == nil {
 		t.Fatal("Chunk must report the failed body")
 	}
 	// The client re-sends the same chunk number, exactly as the web UI does.
-	if _, err := u.Chunk(id, "u1", 0, bytes.NewReader(chunk)); err != nil {
+	if _, err := u.Chunk(context.Background(), id, "u1", 0, bytes.NewReader(chunk)); err != nil {
 		t.Fatalf("chunk retry: %v", err)
 	}
 
@@ -81,11 +82,11 @@ func TestCompleteRejectsShortUpload(t *testing.T) {
 	st := storage.NewLocalDisk(t.TempDir())
 	u := storage.NewUploads(st, nil) // the size check runs before Push, so no FileService needed
 
-	id, err := u.Init("u1", nil, "big.bin", 8192, storage.PushMeta{})
+	id, err := u.Init(context.Background(), "u1", nil, "big.bin", 8192, storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	if _, err := u.Chunk(id, "u1", 0, strings.NewReader(strings.Repeat("A", 4096))); err != nil {
+	if _, err := u.Chunk(context.Background(), id, "u1", 0, strings.NewReader(strings.Repeat("A", 4096))); err != nil {
 		t.Fatalf("chunk: %v", err)
 	}
 
@@ -100,14 +101,14 @@ func TestChunkRejectsOvershoot(t *testing.T) {
 	st := storage.NewLocalDisk(t.TempDir())
 	u := storage.NewUploads(st, nil)
 
-	id, err := u.Init("u1", nil, "big.bin", 4096, storage.PushMeta{})
+	id, err := u.Init(context.Background(), "u1", nil, "big.bin", 4096, storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	if _, err := u.Chunk(id, "u1", 0, strings.NewReader(strings.Repeat("A", 4096))); err != nil {
+	if _, err := u.Chunk(context.Background(), id, "u1", 0, strings.NewReader(strings.Repeat("A", 4096))); err != nil {
 		t.Fatalf("chunk 0: %v", err)
 	}
-	if _, err := u.Chunk(id, "u1", 1, strings.NewReader(strings.Repeat("B", 4096))); !errors.Is(err, storage.ErrUploadSize) {
+	if _, err := u.Chunk(context.Background(), id, "u1", 1, strings.NewReader(strings.Repeat("B", 4096))); !errors.Is(err, storage.ErrUploadSize) {
 		t.Fatalf("overshooting chunk must be ErrUploadSize, got %v", err)
 	}
 

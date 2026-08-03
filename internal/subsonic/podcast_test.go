@@ -336,8 +336,8 @@ func TestPodcastUserIsolation(t *testing.T) {
 // Returns a restore function to be deferred.
 func overrideDownloadTo() func() {
 	orig := downloadTo
-	downloadTo = func(ctx context.Context, url, dest string) (int64, string, string, error) {
-		return podcast.DownloadToUnsafe(ctx, http.DefaultClient, url, dest)
+	downloadTo = func(ctx context.Context, url, dest string, max int64) (int64, string, string, error) {
+		return podcast.DownloadToUnsafe(ctx, http.DefaultClient, url, dest, max)
 	}
 	return func() { downloadTo = orig }
 }
@@ -501,7 +501,7 @@ func startRSSServerWithCover(t *testing.T) *httptest.Server {
 func overrideDownloadCover() func() {
 	orig := podcast.CoverDownloadFunc
 	podcast.CoverDownloadFunc = func(ctx context.Context, url, dest string) (int64, string, string, error) {
-		return podcast.DownloadToUnsafe(ctx, http.DefaultClient, url, dest)
+		return podcast.DownloadToUnsafe(ctx, http.DefaultClient, url, dest, 0)
 	}
 	return func() { podcast.CoverDownloadFunc = orig }
 }

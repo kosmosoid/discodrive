@@ -98,6 +98,7 @@
   },
   "trash": {
     "title": "Papierkorb",
+    "occupies": "belegt {size} — zählt weiterhin gegen Ihr Kontingent",
     "empty": "Papierkorb ist leer",
     "purge_all": "Papierkorb leeren",
     "deleted_at": "gelöscht {date}",
@@ -440,6 +441,8 @@
     "disk_free": "Frei",
     "of": "von",
     "users_count": "Benutzer",
+    "storage_limit": "Speicherlimit",
+    "quota_assignable": "{size} noch vergebbar",
     "col_email": "E-Mail",
     "col_role": "Rolle",
     "col_used": "Belegt",
@@ -501,6 +504,11 @@
     "resume": "Fortsetzen",
     "cancel": "Abbrechen",
     "paused": "pausiert"
+  },
+  "storage": {
+    "title": "Speicher",
+    "free": "{size} frei",
+    "no_limit": "kein Limit"
   },
   "index": {
     "loading": "Wird geladen…"

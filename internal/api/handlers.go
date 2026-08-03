@@ -19,6 +19,7 @@ import (
 
 	"discodrive/internal/auth"
 	"discodrive/internal/db"
+	"discodrive/internal/quota"
 	"discodrive/internal/storage"
 )
 
@@ -247,6 +248,52 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toUserDTO(u))
 }
 
+// GET /me/storage — the caller's own space: what they occupy, their quota, and how much
+// they may still write. A user has to be able to see this without an admin: "not enough
+// storage left" on an upload is only actionable if the numbers behind it are visible.
+func (s *Server) handleMeStorage(w http.ResponseWriter, r *http.Request) {
+	uid, err := db.ParseUUID(auth.UserID(r.Context()))
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid token subject")
+		return
+	}
+	user, err := s.q.GetUserByID(r.Context(), uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	used, err := s.q.UserStorageUsage(r.Context(), uid)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	// Trashed files keep costing quota until TRASH_DAYS expires, so "empty the trash"
+	// is the fastest way out of a full quota — the number belongs next to the others.
+	trash, err := s.q.TrashStorageUsage(r.Context(), uid)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	// Available is what is left of the user's OWN quota. It deliberately does not take
+	// the server-wide cap into account: how full the shared disk is is the operator's
+	// business, and reporting it here would show a user without a quota someone else's
+	// numbers as if they were their own. A write the cap refuses still fails with 507
+	// and a message that says so.
+	var userQuota, available *int64
+	if user.StorageQuota.Valid {
+		q := user.StorageQuota.Int64
+		left := max(0, q-used)
+		userQuota, available = &q, &left
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"used": used, "quota": userQuota, "available": available, "trash": trash,
+	})
+}
+
 // GET /files[?parent_id=] (authenticated) — nodes belonging to the current user:
 // without parent_id returns root nodes; otherwise returns folder contents (scoped by user_id).
 func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
@@ -297,6 +344,10 @@ func writeStorageErr(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "not found")
 	case errors.Is(err, storage.ErrUploadSize):
 		writeError(w, http.StatusBadRequest, "upload is incomplete: staged bytes do not match the declared size")
+	case errors.Is(err, quota.ErrExceeded):
+		// 507: the request is fine, the storage behind it is not. The message carries the
+		// numbers, so clients can tell the user how much room is actually left.
+		writeError(w, http.StatusInsufficientStorage, err.Error())
 	default:
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}
@@ -762,7 +813,7 @@ func (s *Server) handleUploadInit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid modified_at, expected RFC3339")
 		return
 	}
-	id, err := s.uploads.Init(auth.UserID(r.Context()), req.ParentID, req.Name, req.Size,
+	id, err := s.uploads.Init(r.Context(), auth.UserID(r.Context()), req.ParentID, req.Name, req.Size,
 		storage.PushMeta{ModifiedAt: mtime})
 	if err != nil {
 		writeStorageErr(w, err)
@@ -778,7 +829,7 @@ func (s *Server) handleUploadChunk(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid chunk number")
 		return
 	}
-	next, err := s.uploads.Chunk(r.PathValue("id"), auth.UserID(r.Context()), n, r.Body)
+	next, err := s.uploads.Chunk(r.Context(), r.PathValue("id"), auth.UserID(r.Context()), n, r.Body)
 	switch {
 	case errors.Is(err, storage.ErrUploadNotFound):
 		writeError(w, http.StatusNotFound, "upload session not found")
@@ -786,6 +837,8 @@ func (s *Server) handleUploadChunk(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "chunk out of order", "next_chunk": next})
 	case errors.Is(err, storage.ErrUploadSize):
 		writeError(w, http.StatusBadRequest, "chunk exceeds the declared file size")
+	case errors.Is(err, quota.ErrExceeded):
+		writeError(w, http.StatusInsufficientStorage, err.Error())
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "internal error")
 	default:

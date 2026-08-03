@@ -16,6 +16,7 @@ import (
 
 	"discodrive/internal/db"
 	"discodrive/internal/fetchguard"
+	"discodrive/internal/quota"
 	"discodrive/internal/storage"
 )
 
@@ -58,6 +59,8 @@ type Service struct {
 	q           *db.Queries
 	st          storage.Storage
 	maxDownload int64 // bytes; 0 = unlimited
+	// quota bounds what the item's owner may write; nil = no limits configured.
+	quota *quota.Checker
 
 	Client   *http.Client
 	Validate func(string) error
@@ -72,6 +75,16 @@ func NewService(q *db.Queries, st storage.Storage, maxDownloadMB int) *Service {
 		Client:      fetchguard.NewClient(0),
 		Validate:    fetchguard.ValidateURL,
 	}
+}
+
+// SetQuota installs the quota checker. Called once at startup, before processing runs.
+func (s *Service) SetQuota(c *quota.Checker) { s.quota = c }
+
+// budget is how many bytes the item's owner may still receive. Saved items land
+// straight on disk (the node row appears at the next rescan), so the quota has to be
+// enforced here — nothing else on this path checks it.
+func (s *Service) budget(ctx context.Context, item db.SavedItem) (int64, error) {
+	return s.quota.Allowance(ctx, item.UserID)
 }
 
 // Create upserts an item and kicks off processing when the row is pending

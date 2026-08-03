@@ -98,6 +98,7 @@
   },
   "trash": {
     "title": "Корзина",
+    "occupies": "занимает {size} — место всё ещё числится за вами",
     "empty": "Корзина пуста",
     "purge_all": "Очистить корзину",
     "deleted_at": "удалено {date}",
@@ -440,6 +441,8 @@
     "disk_free": "Свободно",
     "of": "из",
     "users_count": "Пользователей",
+    "storage_limit": "Лимит хранилища",
+    "quota_assignable": "можно раздать ещё {size}",
     "col_email": "Email",
     "col_role": "Роль",
     "col_used": "Занято",
@@ -501,6 +504,11 @@
     "resume": "Продолжить",
     "cancel": "Отменить",
     "paused": "пауза"
+  },
+  "storage": {
+    "title": "Хранилище",
+    "free": "свободно {size}",
+    "no_limit": "без лимита"
   },
   "index": {
     "loading": "Загрузка…"

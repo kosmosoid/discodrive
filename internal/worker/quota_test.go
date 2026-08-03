@@ -54,4 +54,30 @@ func TestQuotaCandidatesAndMark(t *testing.T) {
 	if notified.Valid {
 		t.Fatal("quota_notified_at must reset to NULL")
 	}
+
+	// Nothing on the write path maintains storage_used; the quota job refreshes it from
+	// the live totals. Without that refresh the column stays at 0 forever and the
+	// "near limit" notification never fires — which is exactly what it used to do.
+	node, err := q.CreateNode(ctx, db.CreateNodeParams{
+		UserID: u.ID, Name: "f.bin", IsDir: false,
+		Size: pgtype.Int8{Int64: 700, Valid: true}, DiskPath: pgtype.Text{String: "f.bin", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("node: %v", err)
+	}
+	if err := q.InsertFileVersion(ctx, db.InsertFileVersionParams{
+		NodeID: node.ID, Version: 1, Size: pgtype.Int8{Int64: 300, Valid: true},
+	}); err != nil {
+		t.Fatalf("version: %v", err)
+	}
+	if err := q.RefreshStorageUsed(ctx); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	var used int64
+	if err := pool.QueryRow(ctx, "SELECT storage_used FROM users WHERE id=$1", u.ID).Scan(&used); err != nil {
+		t.Fatalf("read storage_used: %v", err)
+	}
+	if used != 1000 { // 700 live + 300 in a version snapshot
+		t.Fatalf("storage_used = %d, want 1000", used)
+	}
 }

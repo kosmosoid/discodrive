@@ -15,13 +15,14 @@ import (
 	"discodrive/internal/db"
 )
 
-// 11 file versions → TrimVersions keeps 10 (disk + file_versions), oldest is removed.
+// 12 writes → 11 snapshots (the 12th revision is the live file, which is never
+// snapshotted) → TrimVersions keeps 10 (disk + file_versions), the oldest is removed.
 func TestTrimVersions_KeepsTen(t *testing.T) {
 	ctx := context.Background()
 	fs, q, userID, root := setupFS(t)
 
 	var nodeID string
-	for i := 1; i <= 11; i++ {
+	for i := 1; i <= 12; i++ {
 		res, err := fs.Push(ctx, userID, nil, "multi.txt", nil, "", strings.NewReader(fmt.Sprintf("rev-%d", i)))
 		if err != nil {
 			t.Fatalf("push %d: %v", i, err)
@@ -49,7 +50,7 @@ func TestTrimVersions_KeepsTen(t *testing.T) {
 	if len(after) != 10 {
 		t.Fatalf("versions after trimming=%d, expected 10", len(after))
 	}
-	// 10 newest versions remain (2..11), v1 is deleted
+	// 10 newest snapshots remain (2..11), v1 is deleted
 	for _, v := range after {
 		if v.Version == 1 {
 			t.Fatal("version 1 (the oldest) must be deleted")

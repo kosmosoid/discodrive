@@ -54,7 +54,7 @@ func TestFetchFeedAndDownload(t *testing.T) {
 
 	dir := t.TempDir()
 	dest := filepath.Join(dir, "ep1.mp3")
-	size, ct, _, err := DownloadToUnsafe(context.Background(), http.DefaultClient, feed.Episodes[0].AudioURL, dest)
+	size, ct, _, err := DownloadToUnsafe(context.Background(), http.DefaultClient, feed.Episodes[0].AudioURL, dest, 0)
 	if err != nil {
 		t.Fatalf("DownloadToUnsafe: %v", err)
 	}

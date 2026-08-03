@@ -1,6 +1,8 @@
 <script setup lang="ts">
 interface Overview {
   disk: { total: number; used: number; free: number }
+  // limit is the STORAGE_TOTAL_GB cap; total is null when discodrive may use the whole disk.
+  limit: { total: number | null; assignable: number | null }
   users: { id: string; email: string; role: string; quota: number | null; used: number }[]
 }
 
@@ -48,6 +50,13 @@ const diskPct = computed(() => {
       <div class="card p-5">
         <div class="mb-2 text-xs text-muted">{{ t('admin.users_count') }}</div>
         <div class="text-2xl font-semibold">{{ data?.users.length ?? '—' }}</div>
+      </div>
+      <div v-if="data?.limit.total != null" class="card p-5">
+        <div class="mb-2 text-xs text-muted">{{ t('admin.storage_limit') }}</div>
+        <div class="text-2xl font-semibold">{{ formatBytes(data.limit.total) }}</div>
+        <div class="mt-1 text-xs text-muted">
+          {{ t('admin.quota_assignable', { size: formatBytes(data.limit.assignable ?? 0) }) }}
+        </div>
       </div>
     </div>
 

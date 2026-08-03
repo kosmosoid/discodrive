@@ -93,6 +93,7 @@ async function logout() {
         </NuxtLink>
       </nav>
       <div class="border-t border-line p-3">
+        <StorageMeter />
         <div class="mb-2 px-2 text-xs text-muted">
           <div class="truncate text-ink">{{ sess.email }}</div>
         </div>

@@ -1,6 +1,7 @@
 package storage_test
 
 import (
+	"context"
 	"errors"
 	"io"
 	"sync"
@@ -36,13 +37,13 @@ func (b *blockingReader) Read(p []byte) (int, error) {
 func TestUploads_GCDoesNotBlockBehindInFlightChunk(t *testing.T) {
 	u := storage.NewUploads(storage.NewLocalDisk(t.TempDir()), nil)
 
-	id, err := u.Init("u1", nil, "f.txt", 0, storage.PushMeta{})
+	id, err := u.Init(context.Background(), "u1", nil, "f.txt", 0, storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	br := newBlockingReader()
 	defer close(br.release)
-	go func() { _, _ = u.Chunk(id, "u1", 0, br) }()
+	go func() { _, _ = u.Chunk(context.Background(), id, "u1", 0, br) }()
 	<-br.started // Chunk now holds the session mutex, blocked on the client read
 
 	gcDone := make(chan struct{})
@@ -55,7 +56,7 @@ func TestUploads_GCDoesNotBlockBehindInFlightChunk(t *testing.T) {
 
 	initDone := make(chan struct{})
 	go func() {
-		if _, err := u.Init("u1", nil, "g.txt", 0, storage.PushMeta{}); err != nil {
+		if _, err := u.Init(context.Background(), "u1", nil, "g.txt", 0, storage.PushMeta{}); err != nil {
 			t.Errorf("init during in-flight chunk: %v", err)
 		}
 		close(initDone)
@@ -73,12 +74,12 @@ func TestUploads_GCDoesNotBlockBehindInFlightChunk(t *testing.T) {
 func TestUploads_GCSkipsActivelyUploadingSession(t *testing.T) {
 	u := storage.NewUploads(storage.NewLocalDisk(t.TempDir()), nil)
 
-	id, err := u.Init("u1", nil, "f.txt", 0, storage.PushMeta{})
+	id, err := u.Init(context.Background(), "u1", nil, "f.txt", 0, storage.PushMeta{})
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	br := newBlockingReader()
-	go func() { _, _ = u.Chunk(id, "u1", 0, br) }()
+	go func() { _, _ = u.Chunk(context.Background(), id, "u1", 0, br) }()
 	<-br.started
 
 	gcDone := make(chan struct{})

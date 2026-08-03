@@ -94,6 +94,16 @@ func (s *Service) processArticle(ctx context.Context, item db.SavedItem) (result
 	if slug == "" {
 		slug = "article"
 	}
+	// An article is a few kilobytes of Markdown, but it is still the user's bytes on
+	// the user's disk: a full quota refuses it like any other write.
+	budget, err := s.budget(ctx, item)
+	if err != nil {
+		return result{}, err
+	}
+	if int64(len(doc)) > budget {
+		return result{}, quotaErr(budget)
+	}
+
 	uid := db.UUIDString(item.UserID)
 	// Next to the downloads: everything the extension saves lives in one folder
 	// of the user's storage, and the articles/<year> subfolder keeps the

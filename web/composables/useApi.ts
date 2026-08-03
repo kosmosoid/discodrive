@@ -50,6 +50,7 @@ export function clearSession() {
 
 export function useApi() {
   const sess = useSession()
+  const storageTick = useStorageTick()
 
   async function request<T = any>(path: string, opts: any = {}): Promise<T> {
     const headers: Record<string, string> = { ...(opts.headers || {}) }
@@ -63,6 +64,14 @@ export function useApi() {
       // the session to an earlier (possibly expired) token and force a spurious logout.
       if (fresh && fresh !== sess.value.token && tokenExp(fresh) >= tokenExp(sess.value.token)) {
         setSession({ ...sess.value, token: fresh })
+      }
+      // Anything that is not a read can change how much space the user occupies —
+      // delete, purge, restore, rollback, a saved item, a tag edit. Signalling here
+      // means the sidebar meter follows every operation, including ones added later.
+      // Chunk uploads are the exception: they fire per 8 MiB, so useUploads signals
+      // once when the file is complete instead.
+      if ((opts.method || 'GET').toUpperCase() !== 'GET' && !path.startsWith('/upload/')) {
+        storageTick.value++
       }
       return res._data as T
     } catch (e: any) {

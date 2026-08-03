@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"os"
 	"path"
@@ -23,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"discodrive/internal/db"
+	"discodrive/internal/quota"
 )
 
 var (
@@ -38,6 +40,12 @@ type FileService struct {
 	pool *pgxpool.Pool
 	q    *db.Queries
 	st   Storage
+	// quota bounds what a user may write; nil = no limits configured (tests, and
+	// deployments that set neither user quotas nor a server-wide cap).
+	quota *quota.Checker
+	// noVersions turns off version history entirely (VERSION_KEEP=0): an overwrite
+	// then replaces the content and nothing is kept.
+	noVersions bool
 
 	// rescanMu serializes Rescan: the periodic ticker and the fsnotify watcher
 	// may fire together, and two concurrent walks would race to insert the same
@@ -47,6 +55,38 @@ type FileService struct {
 
 func NewFileService(pool *pgxpool.Pool, st Storage) *FileService {
 	return &FileService{pool: pool, q: db.New(pool), st: st}
+}
+
+// SetQuota installs the quota checker. Called once at startup, before the service
+// handles requests.
+func (s *FileService) SetQuota(c *quota.Checker) { s.quota = c }
+
+// DisableVersions turns off version snapshots (VERSION_KEEP=0). Overwrites then simply
+// replace the file: no history, no rollback, and no disk beyond the files themselves.
+// Called once at startup; version history is on by default.
+func (s *FileService) DisableVersions() { s.noVersions = true }
+
+// Quota returns the checker enforcing writes; nil when no limits are configured (or
+// when there is no file service at all, which some tests construct).
+func (s *FileService) Quota() *quota.Checker {
+	if s == nil {
+		return nil
+	}
+	return s.quota
+}
+
+// CheckQuota reports whether userID may write n more bytes; ErrExceeded if not.
+// Callers that know the size up front (a declared Content-Length) use it to refuse
+// before the transfer instead of during it.
+func (s *FileService) CheckQuota(ctx context.Context, userID string, n int64) error {
+	if s.quota == nil {
+		return nil
+	}
+	uid, err := db.ParseUUID(userID)
+	if err != nil {
+		return ErrNotFound
+	}
+	return s.quota.Check(ctx, uid, n)
 }
 
 func validateName(name string) error {
@@ -316,6 +356,10 @@ func (s *FileService) Restore(ctx context.Context, userID, nodeID string, versio
 	defer tx.Rollback(ctx)
 	qtx := s.q.WithTx(tx)
 
+	// Preserve the content being rolled back, so the rollback itself can be undone.
+	if err := s.snapshot(ctx, qtx, node); err != nil {
+		return db.Node{}, err
+	}
 	// make the target version's content the current content
 	if err := s.st.Copy(fv.DiskPath.String, node.DiskPath.String); err != nil {
 		return db.Node{}, err
@@ -324,9 +368,6 @@ func (s *FileService) Restore(ctx context.Context, userID, nodeID string, versio
 		ID: node.ID, Size: fv.Size, ContentHash: fv.ContentHash, Mime: node.Mime,
 	})
 	if err != nil {
-		return db.Node{}, err
-	}
-	if err := s.snapshot(ctx, qtx, updated); err != nil {
 		return db.Node{}, err
 	}
 	if err := recordChange(ctx, qtx, owner, node.ID, "update", updated.Version); err != nil {
@@ -450,11 +491,20 @@ func (s *FileService) PushWithMeta(ctx context.Context, userID string, parentID 
 	}
 	rel := prefix + "/" + name
 
+	// Quota is charged to the tree owner, not the uploader: a file written into a
+	// folder shared with you lands in the owner's storage and fills their quota.
+	// Overwriting frees nothing — the content being replaced moves into .versions.
+	limited, err := s.quota.Reader(ctx, ownerUUID, r)
+	if err != nil {
+		return PushResult{}, err
+	}
+
 	// Stage content to a temp file: the stream is read only once, and the decision
 	// (accept / conflict) is made afterwards, once we know the size and sha.
 	tmpRel := tmpName()
-	size, sha, err := s.st.WriteFile(tmpRel, r)
+	size, sha, err := s.st.WriteFile(tmpRel, limited)
 	if err != nil {
+		_ = s.st.Remove(tmpRel) // a body cut short by the quota limiter still staged bytes
 		return PushResult{}, err
 	}
 	defer func() { _ = s.st.Remove(tmpRel) }() // clean up if it was never moved
@@ -492,6 +542,12 @@ func (s *FileService) PushWithMeta(ctx context.Context, userID string, parentID 
 
 	// File exists. base_version matches (or was not provided) → accept.
 	if baseVersion == nil || *baseVersion == existing.Version {
+		// Preserve the content about to be overwritten, under the version it belongs to.
+		// The newest version is always the live file itself and is never copied into
+		// .versions — snapshotting it too would store every file twice.
+		if err := s.snapshot(ctx, qtx, existing); err != nil {
+			return PushResult{}, err
+		}
 		if err := s.st.Move(tmpRel, rel); err != nil { // overwrites the primary file
 			return PushResult{}, err
 		}
@@ -524,11 +580,10 @@ func (s *FileService) PushWithMeta(ctx context.Context, userID string, parentID 
 	return s.finishPush(ctx, tx, qtx, ownerUUID, cnode, "create", true)
 }
 
-// finishPush snapshots the version, appends to change_log, and commits the transaction.
+// finishPush appends to change_log and commits the transaction. It does not snapshot:
+// the content it publishes IS the newest version, and that version lives in the file
+// itself. Only content a push replaces goes to .versions.
 func (s *FileService) finishPush(ctx context.Context, tx pgx.Tx, qtx *db.Queries, uid pgtype.UUID, node db.Node, op string, conflicted bool) (PushResult, error) {
-	if err := s.snapshot(ctx, qtx, node); err != nil {
-		return PushResult{}, err
-	}
 	if err := recordChange(ctx, qtx, uid, node.ID, op, node.Version); err != nil {
 		return PushResult{}, err
 	}
@@ -550,9 +605,16 @@ func (s *FileService) ReplaceContentInPlace(ctx context.Context, userID, nodeID 
 		return db.Node{}, ErrNameTaken
 	}
 
-	tmpRel := tmpName()
-	size, sha, err := s.st.WriteFile(tmpRel, r)
+	// No snapshot on this path (that is the point of replacing in place), so the
+	// incoming bytes cost their own size and nothing more.
+	limited, err := s.quota.Reader(ctx, node.UserID, r)
 	if err != nil {
+		return db.Node{}, err
+	}
+	tmpRel := tmpName()
+	size, sha, err := s.st.WriteFile(tmpRel, limited)
+	if err != nil {
+		_ = s.st.Remove(tmpRel)
 		return db.Node{}, err
 	}
 	defer func() { _ = s.st.Remove(tmpRel) }()
@@ -594,21 +656,27 @@ func recordChange(ctx context.Context, qtx *db.Queries, userID, nodeID pgtype.UU
 	return err
 }
 
-// snapshot copies the current file content into the version store and writes a
-// file_versions row for the current node version (trimmed to 10 by the GC job, step 0.6).
+// snapshot copies the content a write is about to replace into the version store and
+// writes a file_versions row for the version it belonged to (trimmed to VERSION_KEEP by
+// the GC job). Callers pass the node as it is BEFORE the new content lands.
+//
+// Snapshots are a copy of the whole file, so a file that is written once and never
+// touched again costs exactly its own size; only editing it starts a history.
 func (s *FileService) snapshot(ctx context.Context, qtx *db.Queries, node db.Node) error {
+	if s.noVersions {
+		return nil
+	}
 	vpath := versionPath(db.UUIDString(node.UserID), db.UUIDString(node.ID), node.Version)
 	if err := s.st.Copy(node.DiskPath.String, vpath); err != nil {
 		return err
 	}
-	_, err := qtx.InsertFileVersion(ctx, db.InsertFileVersionParams{
+	return qtx.InsertFileVersion(ctx, db.InsertFileVersionParams{
 		NodeID:      node.ID,
 		Version:     node.Version,
 		ContentHash: node.ContentHash,
 		DiskPath:    text(vpath),
 		Size:        node.Size,
 	})
-	return err
 }
 
 // versionPath returns the snapshot path outside the tree mirror (ignored by rescan in 0.6).
@@ -635,6 +703,33 @@ func (s *FileService) TrimVersions(ctx context.Context, keep int) error {
 				_ = s.st.Remove(p.String)
 			}
 		}
+	}
+	return nil
+}
+
+// PruneLiveSnapshots removes version snapshots that duplicate a file's current content.
+// They are leftovers from the scheme where a push snapshotted what it had just written,
+// so every stored file also sat in .versions — this is what gives that space back.
+// Nodes modified within idleFor are skipped: their newest snapshot may be a push still
+// in flight, whose row is not committed yet.
+func (s *FileService) PruneLiveSnapshots(ctx context.Context, idleFor time.Duration) error {
+	cutoff := pgtype.Timestamptz{Time: time.Now().Add(-idleFor), Valid: true}
+	rows, err := s.q.ListRedundantVersionSnapshots(ctx, cutoff)
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		// Row first: an orphaned file is cleaned up by the next run of this job (and by
+		// TrashGC), while an orphaned row would offer a rollback to a missing file.
+		if err := s.q.DeleteFileVersion(ctx, r.ID); err != nil {
+			return err
+		}
+		if r.DiskPath.Valid {
+			_ = s.st.Remove(r.DiskPath.String)
+		}
+	}
+	if len(rows) > 0 {
+		log.Printf("discodrive: pruned %d version snapshot(s) duplicating live files", len(rows))
 	}
 	return nil
 }
@@ -784,9 +879,7 @@ func (s *FileService) createDiscovered(ctx context.Context, uid, parentUUID pgty
 		if err != nil {
 			return db.Node{}, mapInsertErr(err)
 		}
-		if err := s.snapshot(ctx, qtx, node); err != nil {
-			return db.Node{}, err
-		}
+		// No snapshot: a freshly discovered file is version 1, and version 1 is the file.
 	}
 	if err := recordChange(ctx, qtx, uid, node.ID, "create", node.Version); err != nil {
 		return db.Node{}, err

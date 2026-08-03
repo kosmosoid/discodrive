@@ -98,6 +98,7 @@
   },
   "trash": {
     "title": "Кошик",
+    "occupies": "займає {size} — місце все ще рахується за вами",
     "empty": "Кошик порожній",
     "purge_all": "Очистити кошик",
     "deleted_at": "видалено {date}",
@@ -440,6 +441,8 @@
     "disk_free": "Вільно",
     "of": "з",
     "users_count": "Користувачів",
+    "storage_limit": "Ліміт сховища",
+    "quota_assignable": "можна розподілити ще {size}",
     "col_email": "Email",
     "col_role": "Роль",
     "col_used": "Зайнято",
@@ -501,6 +504,11 @@
     "resume": "Продовжити",
     "cancel": "Скасувати",
     "paused": "пауза"
+  },
+  "storage": {
+    "title": "Сховище",
+    "free": "вільно {size}",
+    "no_limit": "без ліміту"
   },
   "index": {
     "loading": "Завантаження…"

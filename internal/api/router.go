@@ -14,6 +14,7 @@ import (
 	"discodrive/internal/ebook"
 	"discodrive/internal/music"
 	"discodrive/internal/notify"
+	"discodrive/internal/quota"
 	"discodrive/internal/saved"
 	"discodrive/internal/secret"
 	"discodrive/internal/storage"
@@ -40,6 +41,16 @@ type Server struct {
 	bookmarks    *bookmarks.Service
 }
 
+// quotaChecker is the same checker the storage layer enforces writes with, so the admin
+// panel validates quotas against exactly what the write path will allow. nil (no limits
+// configured, or no file service in a test) is a valid value: every method is nil-safe.
+func (s *Server) quotaChecker() *quota.Checker {
+	if s.files == nil {
+		return nil
+	}
+	return s.files.Quota()
+}
+
 // NewRouter registers public and authenticated routes.
 func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService, uploads *storage.Uploads, storageRoot string, cipher *secret.Cipher, notifier *notify.Notifier, ui fs.FS, davHandler http.Handler, caldavHandler http.Handler, carddavHandler http.Handler, davSvc *davpkg.Service, xaccel bool, events *EventHub, subsonicHandler http.Handler, opdsHandler http.Handler, kosyncHandler http.Handler, tagEditor *music.TagEditor, metaEditor *ebook.MetadataEditor, savedSvc *saved.Service, bookmarksSvc *bookmarks.Service) http.Handler {
 	s := &Server{auth: authSvc, q: q, files: files, uploads: uploads, storageRoot: storageRoot, cipher: cipher, notify: notifier, dav: davSvc, xaccel: xaccel, events: events, loginLimiter: newLoginLimiter(), pollLimiter: newPollLimiter(), feedLimiter: newLoginLimiter(), tagEditor: tagEditor, metaEditor: metaEditor, saved: savedSvc, bookmarks: bookmarksSvc}
@@ -64,6 +75,7 @@ func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService,
 	// authenticated (Bearer JWT, scoped by user_id/tenant_id)
 	prot := authSvc.Middleware
 	mux.Handle("GET /me", prot(http.HandlerFunc(s.handleMe)))
+	mux.Handle("GET /me/storage", prot(http.HandlerFunc(s.handleMeStorage)))
 	mux.Handle("PUT /me/password", prot(http.HandlerFunc(s.handleChangePassword)))
 	mux.Handle("GET /me/totp", prot(http.HandlerFunc(s.handleTOTPStatus)))
 	mux.Handle("POST /me/totp/setup", prot(http.HandlerFunc(s.handleTOTPSetup)))

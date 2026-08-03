@@ -33,6 +33,7 @@ import (
 	"discodrive/internal/music"
 	"discodrive/internal/notify"
 	"discodrive/internal/opds"
+	"discodrive/internal/quota"
 	"discodrive/internal/saved"
 	"discodrive/internal/secret"
 	"discodrive/internal/storage"
@@ -186,6 +187,26 @@ func runServer(cfg config.Config) {
 	fileSvc := storage.NewFileService(pool, store)
 	uploads := storage.NewUploads(store, fileSvc)
 
+	// Storage limits: per-user quotas (users.storage_quota) and the server-wide cap
+	// (STORAGE_TOTAL_GB), enforced on every write path — API uploads (plain and
+	// resumable), WebDAV, sync, the server-side downloads and articles of "Saved", and
+	// podcast episodes (through the file service the Subsonic handler holds). One
+	// checker is shared, so the admin panel validates quotas against exactly what the
+	// write path allows.
+	quotaChecker := quota.New(queries, cfg.StorageTotalBytes())
+	fileSvc.SetQuota(quotaChecker)
+	uploads.SetQuota(quotaChecker)
+	// VERSION_KEEP=0 turns version history off: overwrites replace the file and keep
+	// nothing. The trim job then also clears whatever history is already stored.
+	if cfg.VersionKeep <= 0 {
+		fileSvc.DisableVersions()
+		log.Println("discodrive: file versioning is off (VERSION_KEEP=0) — overwrites cannot be rolled back")
+	}
+	authSvc.SetDefaultQuota(cfg.DefaultUserQuotaBytes())
+	if total := cfg.StorageTotalBytes(); total > 0 {
+		log.Printf("discodrive: storage capped at %s (STORAGE_TOTAL_GB=%d)", quota.HumanBytes(total), cfg.StorageTotalGB)
+	}
+
 	// Bootstrap admin: token-less onboarding via /app/setup when no admin exists yet.
 	if needed, err := authSvc.SetupNeeded(ctx); err != nil {
 		log.Fatalf("discodrive: setup check: %v", err)
@@ -197,6 +218,7 @@ func runServer(cfg config.Config) {
 	// "processing" rows are re-queued before the router and worker start, so the
 	// reset cannot race live processing goroutines.
 	savedSvc := saved.NewService(queries, store, cfg.SavedMaxDownloadMB)
+	savedSvc.SetQuota(quotaChecker)
 	if err := savedSvc.RecoverStale(ctx); err != nil {
 		log.Fatalf("discodrive: saved recover: %v", err)
 	}

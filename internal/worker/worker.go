@@ -19,6 +19,7 @@ import (
 	"discodrive/internal/music"
 	"discodrive/internal/notify"
 	"discodrive/internal/podcast"
+	"discodrive/internal/quota"
 	"discodrive/internal/saved"
 	"discodrive/internal/storage"
 )
@@ -67,6 +68,11 @@ func Default(versionKeep, trashDays, rescanSeconds int) Config {
 	}
 }
 
+// liveSnapshotIdle is how long a node must have been untouched before the
+// prune-live-snapshots job will look at it — long enough that no push can still be
+// mid-write on it.
+const liveSnapshotIdle = 10 * time.Minute
+
 type Worker struct {
 	fs       *storage.FileService
 	root     string
@@ -90,6 +96,11 @@ func (w *Worker) Run(ctx context.Context) {
 	})
 	go w.tick(ctx, w.cfg.TrimInterval, "trim-versions", func(ctx context.Context) error {
 		return w.fs.TrimVersions(ctx, w.cfg.VersionKeep)
+	})
+	// Reclaims the space taken by snapshots of content that is still live — the copies
+	// left behind by the older versioning scheme. Once they are gone this is a no-op.
+	go w.tick(ctx, w.cfg.TrashInterval, "prune-live-snapshots", func(ctx context.Context) error {
+		return w.fs.PruneLiveSnapshots(ctx, liveSnapshotIdle)
 	})
 	go w.tick(ctx, w.cfg.TrashInterval, "trash-gc", func(ctx context.Context) error {
 		return w.fs.TrashGC(ctx, w.cfg.TrashRetention)
@@ -277,18 +288,29 @@ func (w *Worker) watch(ctx context.Context) {
 // quotaNotify sends a notification to users who have crossed 90% of their quota (once),
 // and clears the flag for those who have dropped back below the threshold.
 func (w *Worker) quotaNotify(ctx context.Context) error {
+	// users.storage_used is a cache: nothing on the write path maintains it, so without
+	// this refresh it stays at 0 and the notification below never fires. The quota check
+	// itself never reads the column — it sums the live totals — so a cache that is up to
+	// one tick stale only delays a warning, it can never let a write through.
+	if err := w.q.RefreshStorageUsed(ctx); err != nil {
+		return err
+	}
 	rows, err := w.q.ListQuotaCandidates(ctx)
 	if err != nil {
 		return err
 	}
 	for _, u := range rows {
-		quota := u.StorageQuota.Int64
+		limit := u.StorageQuota.Int64
 		percent := 0
-		if quota > 0 {
-			percent = int(u.StorageUsed * 100 / quota)
+		if limit > 0 {
+			percent = int(u.StorageUsed * 100 / limit)
 		}
+		// Used/Quota go straight into the email body, so they are formatted here —
+		// "107374182400 of 214748364800" is not something to send a person.
 		w.notify.Emit(ctx, db.UUIDString(u.ID), "quota.near_limit", map[string]any{
-			"Percent": percent, "Used": u.StorageUsed, "Quota": quota,
+			"Percent": percent,
+			"Used":    quota.HumanBytes(u.StorageUsed),
+			"Quota":   quota.HumanBytes(limit),
 		})
 		if err := w.q.MarkQuotaNotified(ctx, u.ID); err != nil {
 			return err

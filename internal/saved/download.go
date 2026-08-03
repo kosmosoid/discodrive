@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"discodrive/internal/db"
+	"discodrive/internal/quota"
 )
 
 // errTooLarge aborts a download that exceeds the configured size limit.
@@ -30,6 +31,13 @@ func sizeLimitErr(size, max int64) error {
 		return fmt.Errorf("%w: file is %s, limit is %s (SAVED_MAX_DOWNLOAD_MB)", errTooLarge, humanBytes(size), humanBytes(max))
 	}
 	return fmt.Errorf("%w: limit is %s (SAVED_MAX_DOWNLOAD_MB)", errTooLarge, humanBytes(max))
+}
+
+// quotaErr reports a download stopped by the user's storage quota rather than by the
+// per-download cap. It reaches the user through the item's error field and the
+// notification, so it says how much room was actually left.
+func quotaErr(budget int64) error {
+	return fmt.Errorf("%w: %s of storage left", quota.ErrExceeded, quota.HumanBytes(budget))
 }
 
 func humanBytes(n int64) string {
@@ -71,10 +79,21 @@ func (s *Service) processDownload(ctx context.Context, item db.SavedItem) (resul
 		return result{}, fmt.Errorf("status %d", resp.StatusCode)
 	}
 
+	// The download is bounded by two independent limits: the per-download cap and what
+	// is left of the user's storage. Whichever bites first stops the transfer, and the
+	// error names the right one — "raise SAVED_MAX_DOWNLOAD_MB" is useless advice when
+	// the real problem is a full quota.
+	budget, err := s.budget(ctx, item)
+	if err != nil {
+		return result{}, err
+	}
 	var total pgtype.Int8
 	if resp.ContentLength > 0 {
 		if s.maxDownload > 0 && resp.ContentLength > s.maxDownload {
 			return result{}, sizeLimitErr(resp.ContentLength, s.maxDownload)
+		}
+		if resp.ContentLength > budget {
+			return result{}, quotaErr(budget)
 		}
 		total = pgtype.Int8{Int64: resp.ContentLength, Valid: true}
 	}
@@ -86,7 +105,8 @@ func (s *Service) processDownload(ctx context.Context, item db.SavedItem) (resul
 		return result{}, err
 	}
 
-	pr := &progressReader{ctx: ctx, r: resp.Body, q: s.q, id: item.ID, max: s.maxDownload, total: total}
+	pr := &progressReader{ctx: ctx, r: resp.Body, q: s.q, id: item.ID, max: s.maxDownload,
+		budget: budget, total: total}
 	tmpRel := ".tmp/saved-" + randHex(16)
 	size, _, err := s.st.WriteFile(tmpRel, pr)
 	if err != nil {
@@ -203,16 +223,19 @@ func isUTF8Boundary(s string) bool {
 // was deleted mid-download — the reader aborts with errDeleted so the caller
 // discards the staging file.
 type progressReader struct {
-	ctx   context.Context
-	r     io.Reader
-	q     *db.Queries
-	id    pgtype.UUID
-	max   int64
-	total pgtype.Int8
+	ctx context.Context
+	r   io.Reader
+	q   *db.Queries
+	id  pgtype.UUID
+	max int64
+	// budget is how many bytes the owner's quota still permits; quota.Unlimited when
+	// nothing constrains it.
+	budget int64
+	total  pgtype.Int8
 
 	read int64
 	last time.Time
-	err  error // sticky verdict: errDeleted or errTooLarge
+	err  error // sticky verdict: errDeleted, errTooLarge or ErrExceeded
 }
 
 func (p *progressReader) Read(b []byte) (int, error) {
@@ -221,6 +244,10 @@ func (p *progressReader) Read(b []byte) (int, error) {
 	if p.max > 0 && p.read > p.max {
 		// The size is unknown up front (chunked), so report the limit itself.
 		p.err = sizeLimitErr(p.total.Int64, p.max)
+		return n, p.err
+	}
+	if p.read > p.budget {
+		p.err = quotaErr(p.budget)
 		return n, p.err
 	}
 	if time.Since(p.last) >= time.Second {

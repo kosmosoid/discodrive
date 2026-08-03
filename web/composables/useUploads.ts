@@ -28,6 +28,7 @@ let localSeq = 0
 export function useUploads() {
   const tasks = useUploadTasks()
   const tick = useUploadsTick()
+  const storageTick = useStorageTick()
   const { request } = useApi()
 
   function schedule() {
@@ -88,6 +89,10 @@ export function useUploads() {
           } else if (status === 404) {
             // upload session is gone (server restarted) — resume is not possible
             throw new Error('upload interrupted (session lost), please start over')
+          } else if (status === 507) {
+            // out of storage: retrying cannot help, and the server's message says
+            // how much room is left — surface it instead of hammering the chunk.
+            throw err
           } else if (retries < MAX_RETRIES) {
             // transient network error: check status and retry the same chunk
             retries++
@@ -108,6 +113,7 @@ export function useUploads() {
       t.status = 'done'
       controls.delete(t.id)
       tick.value++
+      storageTick.value++ // useApi skips the chunk PUTs; the finished file is what counts
     } catch (e: any) {
       if (ctl.canceled) return
       t.status = 'error'

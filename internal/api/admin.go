@@ -11,6 +11,7 @@ import (
 
 	"discodrive/internal/auth"
 	"discodrive/internal/db"
+	"discodrive/internal/quota"
 )
 
 // diskUsage(path) is declared per-platform (disk_linux.go / disk_other.go):
@@ -43,6 +44,16 @@ func (s *Server) getSettingValue(ctx context.Context, key string) string {
 	return row.Value
 }
 
+// writeQuotaAssignErr answers a quota that does not fit under the server-wide cap.
+// 422: the request is well-formed, the number in it is not allocatable.
+func writeQuotaAssignErr(w http.ResponseWriter, err error) {
+	if errors.Is(err, quota.ErrOvercommit) {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	writeError(w, http.StatusInternalServerError, "internal error")
+}
+
 func int8Ptr(v *int64) pgtype.Int8 {
 	if v == nil {
 		return pgtype.Int8{}
@@ -61,6 +72,13 @@ func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	// How much of the server-wide cap is still free to hand out; the admin needs it to
+	// size the next quota, and it is what create/update validate against.
+	assignable, capped, err := s.quotaChecker().Assignable(r.Context(), pgtype.UUID{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 	users := make([]map[string]any, 0, len(rows))
 	for _, u := range rows {
 		var quota *int64
@@ -73,8 +91,14 @@ func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
 			"quota": quota, "used": u.Used,
 		})
 	}
+	limit := map[string]any{"total": nil, "assignable": nil}
+	if capped {
+		limit = map[string]any{"total": s.quotaChecker().Total(), "assignable": assignable}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"disk":  map[string]any{"total": total, "used": total - free, "free": free},
+		"disk": map[string]any{"total": total, "used": total - free, "free": free},
+		// limit is the STORAGE_TOTAL_GB cap: null when discodrive may use the whole disk.
+		"limit": limit,
 		"users": users,
 	})
 }
@@ -95,7 +119,21 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
-	user, err := s.auth.AdminCreateUser(r.Context(), req.Email, req.Password, req.Role, req.Quota)
+	// Validate the quota the user will actually get, default included — otherwise
+	// creating users with the form's quota field left empty would hand out
+	// DEFAULT_USER_QUOTA_GB each time without ever testing it against the cap.
+	wanted := req.Quota
+	if wanted == nil && req.Role != "admin" {
+		if d := s.auth.DefaultQuota(); d > 0 {
+			wanted = &d
+		}
+	}
+	// Nobody exists to exclude yet, so the whole assigned total counts.
+	if err := s.quotaChecker().CheckAssign(r.Context(), pgtype.UUID{}, wanted); err != nil {
+		writeQuotaAssignErr(w, err)
+		return
+	}
+	user, err := s.auth.AdminCreateUser(r.Context(), req.Email, req.Password, req.Role, wanted)
 	switch {
 	case errors.Is(err, auth.ErrEmailTaken):
 		writeError(w, http.StatusConflict, "email already taken")
@@ -123,6 +161,11 @@ func (s *Server) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Role != "admin" && req.Role != "user" {
 		writeError(w, http.StatusBadRequest, "role must be admin or user")
+		return
+	}
+	// This user's current quota is being replaced, so it must not count against the new one.
+	if err := s.quotaChecker().CheckAssign(r.Context(), uid, req.Quota); err != nil {
+		writeQuotaAssignErr(w, err)
 		return
 	}
 	u, err := s.q.UpdateUser(r.Context(), db.UpdateUserParams{ID: uid, StorageQuota: int8Ptr(req.Quota), Role: req.Role})

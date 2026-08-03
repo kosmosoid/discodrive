@@ -98,6 +98,7 @@
   },
   "trash": {
     "title": "Papelera",
+    "occupies": "ocupa {size}: sigue contando para tu cuota",
     "empty": "La papelera está vacía",
     "purge_all": "Vaciar papelera",
     "deleted_at": "eliminado el {date}",
@@ -440,6 +441,8 @@
     "disk_free": "Libre",
     "of": "de",
     "users_count": "Usuarios",
+    "storage_limit": "Límite de almacenamiento",
+    "quota_assignable": "quedan {size} por asignar",
     "col_email": "Correo",
     "col_role": "Rol",
     "col_used": "Usado",
@@ -501,6 +504,11 @@
     "resume": "Reanudar",
     "cancel": "Cancelar",
     "paused": "en pausa"
+  },
+  "storage": {
+    "title": "Almacenamiento",
+    "free": "{size} libres",
+    "no_limit": "sin límite"
   },
   "index": {
     "loading": "Cargando…"

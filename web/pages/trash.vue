@@ -6,6 +6,9 @@ const { request } = useApi()
 const { confirm } = useDialog()
 const items = ref<TrashNode[]>([])
 const error = ref('')
+// What emptying the trash would give back. Summing the rows below would understate it:
+// a deleted folder is one row, and version history is not listed at all.
+const size = ref<number | null>(null)
 
 async function load() {
   error.value = ''
@@ -13,6 +16,11 @@ async function load() {
     items.value = await request<TrashNode[]>('/files/trash')
   } catch (e: any) {
     error.value = e?.data?.error || t('trash.error_load')
+  }
+  try {
+    size.value = (await request<{ trash: number }>('/me/storage')).trash
+  } catch {
+    size.value = null // the listing is the point; the number is a bonus
   }
 }
 onMounted(load)
@@ -57,7 +65,10 @@ async function purgeAll() {
 <template>
   <div>
     <div class="mb-4 flex items-center justify-between">
-      <h1 class="text-xl font-semibold">{{ t('trash.title') }}</h1>
+      <div>
+        <h1 class="text-xl font-semibold">{{ t('trash.title') }}</h1>
+        <p v-if="size" class="mt-0.5 text-xs text-muted">{{ t('trash.occupies', { size: formatBytes(size) }) }}</p>
+      </div>
       <button v-if="items.length" class="btn-danger" @click="purgeAll">
         <Icon name="lucide:trash-2" size="16" /> {{ t('trash.purge_all') }}
       </button>

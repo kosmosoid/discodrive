@@ -12,6 +12,7 @@ import (
 
 	"discodrive/internal/db"
 	"discodrive/internal/podcast"
+	"discodrive/internal/quota"
 )
 
 func init() {
@@ -25,8 +26,9 @@ func init() {
 }
 
 // downloadTo is the seam used by tests to override the download function without
-// going through the SSRF guard (which blocks 127.0.0.1 httptest servers).
-var downloadTo = podcast.DownloadTo
+// going through the SSRF guard (which blocks 127.0.0.1 httptest servers). The last
+// argument is the byte ceiling for one episode (0 = none).
+var downloadTo = podcast.DownloadToLimit
 
 // proxyEpisode is the seam used by tests to override on-demand episode proxying
 // without going through the SSRF guard (which blocks 127.0.0.1 httptest servers).
@@ -414,6 +416,25 @@ func downloadPodcastEpisode(h *Handler, c *reqCtx) {
 		return
 	}
 
+	// Episodes are stored outside the file tree (podcasts/<user>/), but they are the
+	// user's bytes on the user's disk and count toward the quota like everything else.
+	// A feed does not state a trustworthy size, so all we can do up front is refuse
+	// when there is no room at all, and hold the stream to what is left.
+	allowance, err := h.files.Quota().Allowance(ctx, userUUID)
+	if err != nil {
+		log.Printf("discodrive: downloadPodcastEpisode quota: %v", err)
+		c.fail(ErrGeneric, "database error")
+		return
+	}
+	if allowance <= 0 {
+		c.fail(ErrGeneric, "not enough storage left")
+		return
+	}
+	episodeMax := allowance
+	if episodeMax == quota.Unlimited {
+		episodeMax = 0 // the downloader's "no ceiling"
+	}
+
 	// Atomically claim the episode for download. This closes the TOCTOU between
 	// reading the status and setting it to "downloading": only one concurrent
 	// call can flip a non-downloading/non-completed row, so only one goroutine
@@ -450,7 +471,7 @@ func downloadPodcastEpisode(h *Handler, c *reqCtx) {
 		// A mid-download error leaves a partial file at dest; it is intentionally
 		// overwritten on retry, since dest is deterministic and streaming requires
 		// status == "completed" (which is only set after a full download).
-		size, ct, suf, dlErr := downloadTo(bg, audioURL, dest)
+		size, ct, suf, dlErr := downloadTo(bg, audioURL, dest, episodeMax)
 		if dlErr != nil {
 			log.Printf("discodrive: downloadPodcastEpisode download %s: %v", db.UUIDString(epID), dlErr)
 			if setErr := h.q.SetEpisodeStatus(bg, db.SetEpisodeStatusParams{

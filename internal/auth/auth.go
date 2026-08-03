@@ -38,6 +38,31 @@ type Service struct {
 	// getUserByEmail / availableFactors are seams so Login is testable without a live DB.
 	getUserByEmail   func(context.Context, string) (db.User, error)
 	availableFactors func(context.Context, pgtype.UUID) ([]string, error)
+	// defaultQuota (bytes) is given to users created without an explicit one;
+	// 0 = none, i.e. only the server-wide cap applies. Existing users are untouched.
+	defaultQuota int64
+}
+
+// SetDefaultQuota sets the quota new users get when none is specified (DEFAULT_USER_QUOTA_GB).
+func (s *Service) SetDefaultQuota(bytes int64) { s.defaultQuota = bytes }
+
+// DefaultQuota is the quota (bytes) a new non-admin user gets when none is specified;
+// 0 = none. Callers that validate a quota before creating the user need the same
+// number this service would apply.
+func (s *Service) DefaultQuota() int64 { return s.defaultQuota }
+
+// quotaFor turns a requested quota into the column value: an explicit request wins,
+// then the configured default, otherwise NULL (no personal quota). Admins are left
+// uncapped by default — the person who owns the server should not have to raise their
+// own quota to use it; the server-wide cap still bounds what they can write.
+func (s *Service) quotaFor(requested *int64, role string) pgtype.Int8 {
+	if requested != nil {
+		return pgtype.Int8{Int64: *requested, Valid: true}
+	}
+	if role != "admin" && s.defaultQuota > 0 {
+		return pgtype.Int8{Int64: s.defaultQuota, Valid: true}
+	}
+	return pgtype.Int8{}
 }
 
 func NewService(pool *pgxpool.Pool, issuer *TokenIssuer, cipher *secret.Cipher) *Service {
@@ -182,7 +207,7 @@ func (s *Service) createUserTx(ctx context.Context, email, hash, role, tenantNam
 		TenantID:           tenant.ID,
 		Email:              email,
 		PasswordHash:       hash,
-		StorageQuota:       pgtype.Int8{}, // NULL = no explicit quota
+		StorageQuota:       s.quotaFor(nil, role),
 		Role:               role,
 		MustChangePassword: false,
 	})
@@ -215,10 +240,7 @@ func (s *Service) AdminCreateUser(ctx context.Context, email, password, role str
 	if err != nil {
 		return db.User{}, err
 	}
-	q := pgtype.Int8{}
-	if quota != nil {
-		q = pgtype.Int8{Int64: *quota, Valid: true}
-	}
+	q := s.quotaFor(quota, role)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

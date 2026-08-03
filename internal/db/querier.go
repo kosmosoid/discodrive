@@ -143,6 +143,7 @@ type Querier interface {
 	DeleteCalendarObject(ctx context.Context, arg DeleteCalendarObjectParams) (int64, error)
 	DeleteDevice(ctx context.Context, arg DeleteDeviceParams) error
 	DeleteExpiredPairings(ctx context.Context) error
+	DeleteFileVersion(ctx context.Context, id pgtype.UUID) error
 	DeleteFinishedDownloads(ctx context.Context, arg DeleteFinishedDownloadsParams) (int64, error)
 	DeleteInternetRadioStation(ctx context.Context, arg DeleteInternetRadioStationParams) (int64, error)
 	DeletePlaylistForUser(ctx context.Context, arg DeletePlaylistForUserParams) error
@@ -213,7 +214,11 @@ type Querier interface {
 	InsertBackupCode(ctx context.Context, arg InsertBackupCodeParams) error
 	InsertBookAuthor(ctx context.Context, arg InsertBookAuthorParams) error
 	InsertBookTag(ctx context.Context, arg InsertBookTagParams) error
-	InsertFileVersion(ctx context.Context, arg InsertFileVersionParams) (FileVersion, error)
+	// A version is snapshotted once, when the content that carried it is replaced. The
+	// conflict clause covers nodes written under the old scheme, whose current version was
+	// already snapshotted: re-snapshotting the same version is the same bytes, so keep the
+	// row that is there instead of duplicating it.
+	InsertFileVersion(ctx context.Context, arg InsertFileVersionParams) error
 	InsertPlayHistory(ctx context.Context, arg InsertPlayHistoryParams) error
 	// WebAuthn credentials (A.4). The full go-webauthn Credential is stored as JSON.
 	InsertWebAuthnCredential(ctx context.Context, arg InsertWebAuthnCredentialParams) (WebauthnCredential, error)
@@ -256,6 +261,10 @@ type Querier interface {
 	ListPodcastChannelsForUser(ctx context.Context, userID pgtype.UUID) ([]PodcastChannel, error)
 	ListPublicSettings(ctx context.Context) ([]Setting, error)
 	ListQuotaCandidates(ctx context.Context) ([]ListQuotaCandidatesRow, error)
+	// Snapshots that duplicate a node's live content: leftovers from the scheme where a
+	// push snapshotted what it had just written. The cutoff keeps the job away from nodes
+	// being written right now, whose new snapshot is not committed yet.
+	ListRedundantVersionSnapshots(ctx context.Context, modifiedBefore pgtype.Timestamptz) ([]ListRedundantVersionSnapshotsRow, error)
 	ListRootNodes(ctx context.Context, userID pgtype.UUID) ([]Node, error)
 	// Downloads are an internal queue and never appear in listings.
 	ListSavedItems(ctx context.Context, arg ListSavedItemsParams) ([]SavedItem, error)
@@ -280,7 +289,13 @@ type Querier interface {
 	ListTrashedSubtree(ctx context.Context, arg ListTrashedSubtreeParams) ([]ListTrashedSubtreeRow, error)
 	ListUnusedBackupCodes(ctx context.Context, userID pgtype.UUID) ([]BackupCode, error)
 	ListUserIDs(ctx context.Context) ([]pgtype.UUID, error)
-	// Users with used space (sum of live file sizes) — for the admin dashboard.
+	// Users with used space — for the admin dashboard, and the definition the quota check
+	// runs against (kept identical in UserStorageUsage, TotalStorageUsage and
+	// RefreshStorageUsed). "Used" is what the user actually occupies on disk: live files,
+	// files still in the trash (they are deleted for real only after TRASH_DAYS), version
+	// snapshots, and downloaded podcast episodes (which live outside the file tree, in
+	// podcasts/<user>/). Anything narrower would let a user park unlimited data past their
+	// quota in the trash, in .versions, or in a podcast subscription.
 	ListUsersWithUsage(ctx context.Context) ([]ListUsersWithUsageRow, error)
 	ListWebAuthnCredentials(ctx context.Context, userID pgtype.UUID) ([]WebauthnCredential, error)
 	ListWebdavDevicesByEmail(ctx context.Context, email string) ([]Device, error)
@@ -305,6 +320,10 @@ type Querier interface {
 	// so without these rows a folder moved into the sync scope arrives empty.
 	RecordSubtreeChanges(ctx context.Context, arg RecordSubtreeChangesParams) error
 	RefreshAlbumSongCount(ctx context.Context, id pgtype.UUID) error
+	// Refreshes the users.storage_used cache from the live totals. The column feeds the
+	// "90% of quota" notification job only — the quota check itself always computes usage
+	// fresh, so a stale cache can never let a write through.
+	RefreshStorageUsed(ctx context.Context) error
 	RenameWebAuthnCredential(ctx context.Context, arg RenameWebAuthnCredentialParams) error
 	ResetStaleSavedItems(ctx context.Context) (int64, error)
 	RetrySavedItem(ctx context.Context, arg RetrySavedItemParams) (int64, error)
@@ -361,13 +380,23 @@ type Querier interface {
 	SongsMetaByNodeIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]SongsMetaByNodeIDsRow, error)
 	Star(ctx context.Context, arg StarParams) error
 	StarredItems(ctx context.Context, userID pgtype.UUID) ([]StarredItemsRow, error)
+	// Sum of the quotas handed out to users, optionally excluding one (the user being
+	// edited). NULL exclude_id excludes nobody. Used to keep the handed-out total within
+	// the server-wide cap.
+	SumAssignedQuotas(ctx context.Context, excludeID pgtype.UUID) (int64, error)
 	// TombstoneBookmarkTree marks the whole subtree deleted with one seq value
 	// (valid: the cursor needs per-row monotonicity, not uniqueness). Runs inside
 	// a tx after NextBookmarkSeq.
 	TombstoneBrowserBookmarkTree(ctx context.Context, arg TombstoneBrowserBookmarkTreeParams) (int64, error)
 	// Returns accessible songs for a given artist name ordered by caller's play count descending.
 	TopSongsByArtistName(ctx context.Context, arg TopSongsByArtistNameParams) ([]TopSongsByArtistNameRow, error)
+	// Used space across all users — checked against the server-wide cap (STORAGE_TOTAL_GB).
+	TotalStorageUsage(ctx context.Context) (int64, error)
 	TouchDevice(ctx context.Context, id pgtype.UUID) error
+	// The part of a user's occupied space that emptying the trash would release: trashed
+	// files plus the version history that goes with them. Files sit there for TRASH_DAYS,
+	// so this is the fastest space a user can free by themselves.
+	TrashStorageUsage(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Delete versions beyond the keep newest; return snapshot paths for disk cleanup.
 	TrimNodeVersions(ctx context.Context, arg TrimNodeVersionsParams) ([]pgtype.Text, error)
 	UndeleteSubtree(ctx context.Context, arg UndeleteSubtreeParams) error
@@ -415,6 +444,9 @@ type Querier interface {
 	// TOTP 2FA (A.3). Secret is AES-GCM ciphertext.
 	// Begin (or restart) TOTP setup: store an encrypted secret, not yet confirmed.
 	UpsertUserTOTP(ctx context.Context, arg UpsertUserTOTPParams) error
+	// Used space of a single user, same definition as ListUsersWithUsage. This is the
+	// number the quota check runs against on every write.
+	UserStorageUsage(ctx context.Context, userID pgtype.UUID) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

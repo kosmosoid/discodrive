@@ -764,6 +764,15 @@ func (q *Queries) DeleteExpiredPairings(ctx context.Context) error {
 	return err
 }
 
+const deleteFileVersion = `-- name: DeleteFileVersion :exec
+DELETE FROM file_versions WHERE id = $1
+`
+
+func (q *Queries) DeleteFileVersion(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteFileVersion, id)
+	return err
+}
+
 const deleteSetting = `-- name: DeleteSetting :exec
 DELETE FROM settings WHERE key = $1
 `
@@ -1395,11 +1404,11 @@ func (q *Queries) InsertBackupCode(ctx context.Context, arg InsertBackupCodePara
 	return err
 }
 
-const insertFileVersion = `-- name: InsertFileVersion :one
+const insertFileVersion = `-- name: InsertFileVersion :exec
 INSERT INTO file_versions (
     node_id, version, content_hash, disk_path, size, device_id, is_conflict_loser
 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, node_id, version, content_hash, disk_path, size, device_id, is_conflict_loser, created_at
+ON CONFLICT (node_id, version) DO NOTHING
 `
 
 type InsertFileVersionParams struct {
@@ -1412,8 +1421,12 @@ type InsertFileVersionParams struct {
 	IsConflictLoser bool        `json:"is_conflict_loser"`
 }
 
-func (q *Queries) InsertFileVersion(ctx context.Context, arg InsertFileVersionParams) (FileVersion, error) {
-	row := q.db.QueryRow(ctx, insertFileVersion,
+// A version is snapshotted once, when the content that carried it is replaced. The
+// conflict clause covers nodes written under the old scheme, whose current version was
+// already snapshotted: re-snapshotting the same version is the same bytes, so keep the
+// row that is there instead of duplicating it.
+func (q *Queries) InsertFileVersion(ctx context.Context, arg InsertFileVersionParams) error {
+	_, err := q.db.Exec(ctx, insertFileVersion,
 		arg.NodeID,
 		arg.Version,
 		arg.ContentHash,
@@ -1422,19 +1435,7 @@ func (q *Queries) InsertFileVersion(ctx context.Context, arg InsertFileVersionPa
 		arg.DeviceID,
 		arg.IsConflictLoser,
 	)
-	var i FileVersion
-	err := row.Scan(
-		&i.ID,
-		&i.NodeID,
-		&i.Version,
-		&i.ContentHash,
-		&i.DiskPath,
-		&i.Size,
-		&i.DeviceID,
-		&i.IsConflictLoser,
-		&i.CreatedAt,
-	)
-	return i, err
+	return err
 }
 
 const insertWebAuthnCredential = `-- name: InsertWebAuthnCredential :one
@@ -2141,6 +2142,40 @@ func (q *Queries) ListQuotaCandidates(ctx context.Context) ([]ListQuotaCandidate
 	return items, nil
 }
 
+const listRedundantVersionSnapshots = `-- name: ListRedundantVersionSnapshots :many
+SELECT fv.id, fv.disk_path FROM file_versions fv
+JOIN nodes n ON n.id = fv.node_id
+WHERE fv.version >= n.version AND n.modified_at < $1
+`
+
+type ListRedundantVersionSnapshotsRow struct {
+	ID       pgtype.UUID `json:"id"`
+	DiskPath pgtype.Text `json:"disk_path"`
+}
+
+// Snapshots that duplicate a node's live content: leftovers from the scheme where a
+// push snapshotted what it had just written. The cutoff keeps the job away from nodes
+// being written right now, whose new snapshot is not committed yet.
+func (q *Queries) ListRedundantVersionSnapshots(ctx context.Context, modifiedBefore pgtype.Timestamptz) ([]ListRedundantVersionSnapshotsRow, error) {
+	rows, err := q.db.Query(ctx, listRedundantVersionSnapshots, modifiedBefore)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRedundantVersionSnapshotsRow{}
+	for rows.Next() {
+		var i ListRedundantVersionSnapshotsRow
+		if err := rows.Scan(&i.ID, &i.DiskPath); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRootNodes = `-- name: ListRootNodes :many
 SELECT id, user_id, parent_id, name, is_dir, size, content_hash, disk_path, mime, is_vault, version, modified_at, modified_by, deleted_at, created_at, is_conflict_loser, conflict_of FROM nodes
 WHERE user_id = $1 AND parent_id IS NULL AND deleted_at IS NULL
@@ -2452,10 +2487,17 @@ func (q *Queries) ListUserIDs(ctx context.Context) ([]pgtype.UUID, error) {
 
 const listUsersWithUsage = `-- name: ListUsersWithUsage :many
 SELECT u.id, u.email, u.role, u.storage_quota, u.created_at,
-       COALESCE((
+       (COALESCE((
            SELECT SUM(n.size) FROM nodes n
-           WHERE n.user_id = u.id AND n.deleted_at IS NULL AND n.is_dir = false
-       ), 0)::bigint AS used
+           WHERE n.user_id = u.id AND n.is_dir = false
+       ), 0) + COALESCE((
+           SELECT SUM(v.size) FROM file_versions v
+           JOIN nodes vn ON vn.id = v.node_id
+           WHERE vn.user_id = u.id
+       ), 0) + COALESCE((
+           SELECT SUM(e.size) FROM podcast_episodes e
+           WHERE e.user_id = u.id AND e.disk_path IS NOT NULL
+       ), 0))::bigint AS used
 FROM users u
 ORDER BY u.created_at
 `
@@ -2469,7 +2511,13 @@ type ListUsersWithUsageRow struct {
 	Used         int64              `json:"used"`
 }
 
-// Users with used space (sum of live file sizes) — for the admin dashboard.
+// Users with used space — for the admin dashboard, and the definition the quota check
+// runs against (kept identical in UserStorageUsage, TotalStorageUsage and
+// RefreshStorageUsed). "Used" is what the user actually occupies on disk: live files,
+// files still in the trash (they are deleted for real only after TRASH_DAYS), version
+// snapshots, and downloaded podcast episodes (which live outside the file tree, in
+// podcasts/<user>/). Anything narrower would let a user park unlimited data past their
+// quota in the trash, in .versions, or in a podcast subscription.
 func (q *Queries) ListUsersWithUsage(ctx context.Context) ([]ListUsersWithUsageRow, error) {
 	rows, err := q.db.Query(ctx, listUsersWithUsage)
 	if err != nil {
@@ -2658,6 +2706,34 @@ type RecordSubtreeChangesParams struct {
 // so without these rows a folder moved into the sync scope arrives empty.
 func (q *Queries) RecordSubtreeChanges(ctx context.Context, arg RecordSubtreeChangesParams) error {
 	_, err := q.db.Exec(ctx, recordSubtreeChanges, arg.UserID, arg.Prefix)
+	return err
+}
+
+const refreshStorageUsed = `-- name: RefreshStorageUsed :exec
+UPDATE users u SET storage_used = fresh.used
+FROM (
+    SELECT usr.id,
+           (COALESCE((
+               SELECT SUM(n.size) FROM nodes n
+               WHERE n.user_id = usr.id AND n.is_dir = false
+           ), 0) + COALESCE((
+               SELECT SUM(v.size) FROM file_versions v
+               JOIN nodes vn ON vn.id = v.node_id
+               WHERE vn.user_id = usr.id
+           ), 0) + COALESCE((
+               SELECT SUM(e.size) FROM podcast_episodes e
+               WHERE e.user_id = usr.id AND e.disk_path IS NOT NULL
+           ), 0))::bigint AS used
+    FROM users usr
+) AS fresh
+WHERE u.id = fresh.id AND u.storage_used <> fresh.used
+`
+
+// Refreshes the users.storage_used cache from the live totals. The column feeds the
+// "90% of quota" notification job only — the quota check itself always computes usage
+// fresh, so a stale cache can never let a write through.
+func (q *Queries) RefreshStorageUsed(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, refreshStorageUsed)
 	return err
 }
 
@@ -2864,6 +2940,40 @@ func (q *Queries) SoftDeleteSubtree(ctx context.Context, arg SoftDeleteSubtreePa
 	return err
 }
 
+const sumAssignedQuotas = `-- name: SumAssignedQuotas :one
+SELECT COALESCE(SUM(storage_quota), 0)::bigint AS assigned FROM users
+WHERE storage_quota IS NOT NULL
+  AND id IS DISTINCT FROM $1::uuid
+`
+
+// Sum of the quotas handed out to users, optionally excluding one (the user being
+// edited). NULL exclude_id excludes nobody. Used to keep the handed-out total within
+// the server-wide cap.
+func (q *Queries) SumAssignedQuotas(ctx context.Context, excludeID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, sumAssignedQuotas, excludeID)
+	var assigned int64
+	err := row.Scan(&assigned)
+	return assigned, err
+}
+
+const totalStorageUsage = `-- name: TotalStorageUsage :one
+SELECT (COALESCE((
+           SELECT SUM(size) FROM nodes WHERE is_dir = false
+       ), 0) + COALESCE((
+           SELECT SUM(size) FROM file_versions
+       ), 0) + COALESCE((
+           SELECT SUM(size) FROM podcast_episodes WHERE disk_path IS NOT NULL
+       ), 0))::bigint AS used
+`
+
+// Used space across all users — checked against the server-wide cap (STORAGE_TOTAL_GB).
+func (q *Queries) TotalStorageUsage(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, totalStorageUsage)
+	var used int64
+	err := row.Scan(&used)
+	return used, err
+}
+
 const touchDevice = `-- name: TouchDevice :exec
 UPDATE devices SET last_seen_at = now() WHERE id = $1
 `
@@ -2871,6 +2981,27 @@ UPDATE devices SET last_seen_at = now() WHERE id = $1
 func (q *Queries) TouchDevice(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, touchDevice, id)
 	return err
+}
+
+const trashStorageUsage = `-- name: TrashStorageUsage :one
+SELECT (COALESCE((
+           SELECT SUM(n.size) FROM nodes n
+           WHERE n.user_id = $1 AND n.is_dir = false AND n.deleted_at IS NOT NULL
+       ), 0) + COALESCE((
+           SELECT SUM(v.size) FROM file_versions v
+           JOIN nodes vn ON vn.id = v.node_id
+           WHERE vn.user_id = $1 AND vn.deleted_at IS NOT NULL
+       ), 0))::bigint AS used
+`
+
+// The part of a user's occupied space that emptying the trash would release: trashed
+// files plus the version history that goes with them. Files sit there for TRASH_DAYS,
+// so this is the fastest space a user can free by themselves.
+func (q *Queries) TrashStorageUsage(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, trashStorageUsage, userID)
+	var used int64
+	err := row.Scan(&used)
+	return used, err
 }
 
 const trimNodeVersions = `-- name: TrimNodeVersions :many
@@ -3305,4 +3436,27 @@ type UpsertUserTOTPParams struct {
 func (q *Queries) UpsertUserTOTP(ctx context.Context, arg UpsertUserTOTPParams) error {
 	_, err := q.db.Exec(ctx, upsertUserTOTP, arg.UserID, arg.Secret)
 	return err
+}
+
+const userStorageUsage = `-- name: UserStorageUsage :one
+SELECT (COALESCE((
+           SELECT SUM(n.size) FROM nodes n
+           WHERE n.user_id = $1 AND n.is_dir = false
+       ), 0) + COALESCE((
+           SELECT SUM(v.size) FROM file_versions v
+           JOIN nodes vn ON vn.id = v.node_id
+           WHERE vn.user_id = $1
+       ), 0) + COALESCE((
+           SELECT SUM(e.size) FROM podcast_episodes e
+           WHERE e.user_id = $1 AND e.disk_path IS NOT NULL
+       ), 0))::bigint AS used
+`
+
+// Used space of a single user, same definition as ListUsersWithUsage. This is the
+// number the quota check runs against on every write.
+func (q *Queries) UserStorageUsage(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, userStorageUsage, userID)
+	var used int64
+	err := row.Scan(&used)
+	return used, err
 }
