@@ -57,6 +57,13 @@ func (s *Server) handleSyncPutFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid X-Modified-At, expected RFC3339")
 		return
 	}
+	// Answer before the body: sync clients send the whole file in one PUT with a known
+	// length, and a file that cannot fit should cost one round trip, not a full upload
+	// that dies at the last byte — every sync cycle, for as long as the quota is full.
+	if err := s.files.CheckQuota(r.Context(), auth.UserID(r.Context()), r.ContentLength); err != nil {
+		writeStorageErr(w, err)
+		return
+	}
 	res, err := s.files.PushByPathWithMeta(r.Context(), auth.UserID(r.Context()), rel, base, r.Body,
 		storage.PushMeta{ModifiedAt: mtime})
 	if err != nil {

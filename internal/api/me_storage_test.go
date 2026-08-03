@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -114,6 +115,73 @@ func TestMeStorage(t *testing.T) {
 	if out["trash"].(float64) != 400 {
 		t.Fatalf("trash = %v, want 400", out["trash"])
 	}
+}
+
+// The sync clients (desktop daemon, iOS) send a whole file in one PUT with a known
+// length. A file that cannot fit has to be refused on the spot: the daemon retries a
+// failed push every cycle, so answering only after the last byte means re-uploading it
+// in full, forever, while the quota stays full.
+func TestSyncPut_RefusedBeforeTheBody(t *testing.T) {
+	ctx := context.Background()
+	pgC, err := tcpostgres.Run(ctx, "postgres:16-alpine",
+		tcpostgres.WithDatabase("kf"), tcpostgres.WithUsername("kf"), tcpostgres.WithPassword("kf"),
+		tcpostgres.BasicWaitStrategies())
+	if err != nil {
+		t.Skipf("Docker required: %v", err)
+	}
+	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
+	dsn, _ := pgC.ConnectionString(ctx, "sslmode=disable")
+	if err := db.MigrateUp(dsn); err != nil {
+		t.Fatalf("migrations: %v", err)
+	}
+	pool, _ := pgxpool.New(ctx, dsn)
+	t.Cleanup(pool.Close)
+
+	q := db.New(pool)
+	svc := auth.NewService(pool, auth.NewTokenIssuer("secret", time.Hour), nil)
+	tok, user, err := svc.Register(ctx, "u@x.test", "password12")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if _, err := q.UpdateUser(ctx, db.UpdateUserParams{
+		ID: user.ID, Role: "user", StorageQuota: pgtype.Int8{Int64: 100, Valid: true},
+	}); err != nil {
+		t.Fatalf("set quota: %v", err)
+	}
+
+	files := storage.NewFileService(pool, storage.NewLocalDisk(t.TempDir()))
+	files.SetQuota(quota.New(q, 0))
+	h := api.NewRouter(svc, q, files, nil, t.TempDir(), nil, nil, nil, nil, nil, nil, nil,
+		false, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	body := &countingReader{n: 5000}
+	req := httptest.NewRequest(http.MethodPut, "/sync/file?path=big.bin", body)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	req.ContentLength = 5000
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInsufficientStorage {
+		t.Fatalf("PUT /sync/file = %d, want 507 (%s)", rec.Code, rec.Body.String())
+	}
+	if body.read > 0 {
+		t.Fatalf("the body must not be read at all, got %d bytes", body.read)
+	}
+}
+
+// countingReader reports how much of the body the server actually consumed.
+type countingReader struct {
+	n    int
+	read int
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	if c.read >= c.n {
+		return 0, io.EOF
+	}
+	k := min(len(p), c.n-c.read)
+	c.read += k
+	return k, nil
 }
 
 // A user without a personal quota must be told what they occupy and nothing else. The
