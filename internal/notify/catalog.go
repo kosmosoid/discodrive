@@ -191,6 +191,63 @@ var Catalog = map[string]Event{
 			},
 		},
 	},
+	// Addressed to administrators, not to the owner of the data: the recipient is
+	// expected to free space, raise STORAGE_TOTAL_GB or add a disk. Both figures are
+	// always shown — a server can be comfortable on one and out of room on the other.
+	"storage.low_space": {
+		Key: "storage.low_space", Category: Activity, Mandatory: false, DefaultChannels: []string{"email"},
+		Templates: map[string]Template{
+			"en": {
+				Subject: "Server storage is running out ({{.Percent}}% free)",
+				HTML: `<h1>Server storage is running out</h1><p>Only <b>{{.Percent}}%</b> of the storage is still free. Once it is gone, uploads and syncs start failing for everyone.</p>` +
+					`<p><b>Disk:</b> {{.DiskFree}} free of {{.DiskTotal}} ({{.DiskPercent}}%){{if .HasLimit}}<br><b>Storage limit:</b> {{.LimitFree}} free of {{.LimitTotal}} ({{.LimitPercent}}%){{end}}</p>` +
+					`<p>Free up space, empty the users' trash, raise STORAGE_TOTAL_GB or add capacity.</p>`,
+				Text: "Server storage is running out: only {{.Percent}}% free. Disk: {{.DiskFree}} of {{.DiskTotal}} ({{.DiskPercent}}%).{{if .HasLimit}} Storage limit: {{.LimitFree}} of {{.LimitTotal}} ({{.LimitPercent}}%).{{end}} Free up space or add capacity.",
+			},
+			"ru": {
+				Subject: "На сервере заканчивается место ({{.Percent}}% свободно)",
+				HTML: `<h1>Заканчивается место на сервере</h1><p>Свободно всего <b>{{.Percent}}%</b> хранилища. Когда место кончится, загрузки и синхронизация начнут падать у всех.</p>` +
+					`<p><b>Диск:</b> {{.DiskFree}} свободно из {{.DiskTotal}} ({{.DiskPercent}}%){{if .HasLimit}}<br><b>Лимит хранилища:</b> {{.LimitFree}} свободно из {{.LimitTotal}} ({{.LimitPercent}}%){{end}}</p>` +
+					`<p>Освободите место, очистите корзины пользователей, увеличьте STORAGE_TOTAL_GB или добавьте диск.</p>`,
+				Text: "На сервере заканчивается место: свободно {{.Percent}}%. Диск: {{.DiskFree}} из {{.DiskTotal}} ({{.DiskPercent}}%).{{if .HasLimit}} Лимит хранилища: {{.LimitFree}} из {{.LimitTotal}} ({{.LimitPercent}}%).{{end}} Освободите место или добавьте диск.",
+			},
+			"de": {
+				Subject: "Serverspeicher geht zur Neige ({{.Percent}}% frei)",
+				HTML: `<h1>Serverspeicher geht zur Neige</h1><p>Nur noch <b>{{.Percent}}%</b> des Speichers sind frei. Ist er voll, schlagen Uploads und Synchronisierungen für alle fehl.</p>` +
+					`<p><b>Festplatte:</b> {{.DiskFree}} frei von {{.DiskTotal}} ({{.DiskPercent}}%){{if .HasLimit}}<br><b>Speicherlimit:</b> {{.LimitFree}} frei von {{.LimitTotal}} ({{.LimitPercent}}%){{end}}</p>` +
+					`<p>Geben Sie Speicher frei, leeren Sie die Papierkörbe, erhöhen Sie STORAGE_TOTAL_GB oder ergänzen Sie Kapazität.</p>`,
+				Text: "Serverspeicher geht zur Neige: nur {{.Percent}}% frei. Festplatte: {{.DiskFree}} von {{.DiskTotal}} ({{.DiskPercent}}%).{{if .HasLimit}} Speicherlimit: {{.LimitFree}} von {{.LimitTotal}} ({{.LimitPercent}}%).{{end}} Geben Sie Speicher frei oder ergänzen Sie Kapazität.",
+			},
+			"uk": {
+				Subject: "На сервері закінчується місце ({{.Percent}}% вільно)",
+				HTML: `<h1>Закінчується місце на сервері</h1><p>Вільно лише <b>{{.Percent}}%</b> сховища. Коли місце скінчиться, завантаження та синхронізація почнуть падати в усіх.</p>` +
+					`<p><b>Диск:</b> {{.DiskFree}} вільно з {{.DiskTotal}} ({{.DiskPercent}}%){{if .HasLimit}}<br><b>Ліміт сховища:</b> {{.LimitFree}} вільно з {{.LimitTotal}} ({{.LimitPercent}}%){{end}}</p>` +
+					`<p>Звільніть місце, очистіть кошики користувачів, збільште STORAGE_TOTAL_GB або додайте диск.</p>`,
+				Text: "На сервері закінчується місце: вільно {{.Percent}}%. Диск: {{.DiskFree}} з {{.DiskTotal}} ({{.DiskPercent}}%).{{if .HasLimit}} Ліміт сховища: {{.LimitFree}} з {{.LimitTotal}} ({{.LimitPercent}}%).{{end}} Звільніть місце або додайте диск.",
+			},
+			"fr": {
+				Subject: "L'espace de stockage du serveur s'épuise ({{.Percent}} % libre)",
+				HTML: `<h1>L'espace de stockage s'épuise</h1><p>Il ne reste que <b>{{.Percent}} %</b> d'espace libre. Une fois plein, les envois et les synchronisations échoueront pour tout le monde.</p>` +
+					`<p><b>Disque :</b> {{.DiskFree}} libres sur {{.DiskTotal}} ({{.DiskPercent}} %){{if .HasLimit}}<br><b>Limite de stockage :</b> {{.LimitFree}} libres sur {{.LimitTotal}} ({{.LimitPercent}} %){{end}}</p>` +
+					`<p>Libérez de l'espace, videz les corbeilles, augmentez STORAGE_TOTAL_GB ou ajoutez de la capacité.</p>`,
+				Text: "L'espace de stockage du serveur s'épuise : {{.Percent}} % libre. Disque : {{.DiskFree}} sur {{.DiskTotal}} ({{.DiskPercent}} %).{{if .HasLimit}} Limite de stockage : {{.LimitFree}} sur {{.LimitTotal}} ({{.LimitPercent}} %).{{end}} Libérez de l'espace ou ajoutez de la capacité.",
+			},
+			"es": {
+				Subject: "El almacenamiento del servidor se está agotando ({{.Percent}}% libre)",
+				HTML: `<h1>El almacenamiento se está agotando</h1><p>Solo queda <b>{{.Percent}}%</b> de almacenamiento libre. Cuando se acabe, las subidas y sincronizaciones empezarán a fallar para todos.</p>` +
+					`<p><b>Disco:</b> {{.DiskFree}} libres de {{.DiskTotal}} ({{.DiskPercent}}%){{if .HasLimit}}<br><b>Límite de almacenamiento:</b> {{.LimitFree}} libres de {{.LimitTotal}} ({{.LimitPercent}}%){{end}}</p>` +
+					`<p>Libera espacio, vacía las papeleras, aumenta STORAGE_TOTAL_GB o añade capacidad.</p>`,
+				Text: "El almacenamiento del servidor se está agotando: {{.Percent}}% libre. Disco: {{.DiskFree}} de {{.DiskTotal}} ({{.DiskPercent}}%).{{if .HasLimit}} Límite de almacenamiento: {{.LimitFree}} de {{.LimitTotal}} ({{.LimitPercent}}%).{{end}} Libera espacio o añade capacidad.",
+			},
+			"sr": {
+				Subject: "Простор на серверу се приближава крају ({{.Percent}}% слободно)",
+				HTML: `<h1>Понестаје простора на серверу</h1><p>Слободно је само <b>{{.Percent}}%</b> складишта. Када се напуни, отпремања и синхронизација почеће да отказују свима.</p>` +
+					`<p><b>Диск:</b> {{.DiskFree}} слободно од {{.DiskTotal}} ({{.DiskPercent}}%){{if .HasLimit}}<br><b>Ограничење складишта:</b> {{.LimitFree}} слободно од {{.LimitTotal}} ({{.LimitPercent}}%){{end}}</p>` +
+					`<p>Ослободите простор, испразните корпе корисника, повећајте STORAGE_TOTAL_GB или додајте капацитет.</p>`,
+				Text: "Понестаје простора на серверу: слободно {{.Percent}}%. Диск: {{.DiskFree}} од {{.DiskTotal}} ({{.DiskPercent}}%).{{if .HasLimit}} Ограничење складишта: {{.LimitFree}} од {{.LimitTotal}} ({{.LimitPercent}}%).{{end}} Ослободите простор или додајте капацитет.",
+			},
+		},
+	},
 	"account.password_changed": {
 		Key: "account.password_changed", Category: Security, Mandatory: true, DefaultChannels: []string{"email"},
 		Templates: map[string]Template{

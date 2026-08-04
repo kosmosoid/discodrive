@@ -23,6 +23,11 @@ UPDATE users SET language = $2 WHERE id = $1;
 -- name: ListUserIDs :many
 SELECT id FROM users;
 
+-- Administrators, in creation order — the recipients of server-wide alerts (storage
+-- filling up), which are addressed to whoever can actually act on them.
+-- name: ListAdminIDs :many
+SELECT id FROM users WHERE role = 'admin' ORDER BY created_at;
+
 -- Users with used space — for the admin dashboard, and the definition the quota check
 -- runs against (kept identical in UserStorageUsage, TotalStorageUsage and
 -- RefreshStorageUsed). "Used" is what the user actually occupies on disk: live files,

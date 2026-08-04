@@ -39,6 +39,77 @@ var ErrOvercommit = errors.New("quota exceeds the server storage limit")
 // plus its history grows by what the client sent.
 const Unlimited = int64(math.MaxInt64)
 
+// Free-space thresholds, in percent of a storage limit that is still free. They drive
+// both the colour of the admin dashboard tiles and the alert email to administrators,
+// so they live here rather than in either of those two places: the panel must warn
+// about exactly what the mail warns about.
+const (
+	WarnFreePercent = 20
+	CritFreePercent = 10
+	// recoverMargin keeps a limit hovering on a threshold from alternating between two
+	// levels on every tick (and mailing the admin each time it crosses upwards): the
+	// level only drops once free space is this many points clear of the threshold.
+	recoverMargin = 2
+)
+
+// Level is how alarming the remaining free space is.
+type Level int
+
+const (
+	LevelOK Level = iota
+	LevelWarn
+	LevelCritical
+)
+
+// LevelFor maps percent-free to a level. A negative percent means "no limit, or a disk
+// we could not stat" and reports LevelOK — an unknown limit is not an alarm.
+func LevelFor(freePercent int) Level {
+	switch {
+	case freePercent < 0:
+		return LevelOK
+	case freePercent <= CritFreePercent:
+		return LevelCritical
+	case freePercent <= WarnFreePercent:
+		return LevelWarn
+	default:
+		return LevelOK
+	}
+}
+
+// SettledLevel is LevelFor with hysteresis: `was` is the level currently in force, and
+// the result only steps down when free space has climbed recoverMargin points past the
+// threshold that would hold it there.
+func SettledLevel(freePercent int, was Level) Level {
+	now := LevelFor(freePercent)
+	if now >= was {
+		return now
+	}
+	switch was {
+	case LevelCritical:
+		if freePercent < CritFreePercent+recoverMargin {
+			return LevelCritical
+		}
+	case LevelWarn:
+		if freePercent < WarnFreePercent+recoverMargin {
+			return LevelWarn
+		}
+	}
+	return now
+}
+
+// FreePercent is free as a percentage of total, rounded down. Total 0 means there is
+// no limit to be a percentage of, and is reported as -1 ("unknown"), which LevelFor
+// reads as LevelOK.
+func FreePercent(free, total int64) int {
+	if total <= 0 {
+		return -1
+	}
+	if free <= 0 {
+		return 0
+	}
+	return int(free * 100 / total)
+}
+
 // Checker answers "may this user write n more bytes?".
 type Checker struct {
 	q *db.Queries
@@ -57,6 +128,16 @@ func (c *Checker) Total() int64 {
 		return 0
 	}
 	return c.total
+}
+
+// Used reports how much the service occupies in total — the same sum the server-wide
+// cap is checked against, so the admin dashboard shows the number that actually decides
+// whether the next write is refused.
+func (c *Checker) Used(ctx context.Context) (int64, error) {
+	if c == nil {
+		return 0, nil
+	}
+	return c.q.TotalStorageUsage(ctx)
 }
 
 // Allowance reports how many more bytes the user may write: the smaller of what is

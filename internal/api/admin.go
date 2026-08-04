@@ -12,10 +12,8 @@ import (
 	"discodrive/internal/auth"
 	"discodrive/internal/db"
 	"discodrive/internal/quota"
+	"discodrive/internal/storage"
 )
-
-// diskUsage(path) is declared per-platform (disk_linux.go / disk_other.go):
-// on Linux the size is computed in Frsize units; on other OSes, Bsize.
 
 // secretSettingKeys — setting keys whose values are encrypted (is_secret=true).
 var secretSettingKeys = map[string]bool{"smtp.password": true}
@@ -63,7 +61,7 @@ func int8Ptr(v *int64) pgtype.Int8 {
 
 // GET /admin/overview — disk stats and users with quota and used space.
 func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
-	total, free, err := diskUsage(s.storageRoot)
+	total, free, err := storage.DiskUsage(s.storageRoot)
 	if err != nil {
 		total, free = 0, 0 // data directory may not exist yet
 	}
@@ -75,6 +73,14 @@ func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
 	// How much of the server-wide cap is still free to hand out; the admin needs it to
 	// size the next quota, and it is what create/update validate against.
 	assignable, capped, err := s.quotaChecker().Assignable(r.Context(), pgtype.UUID{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	// Space left inside the cap — how much may still be written, as opposed to
+	// assignable, which is how much may still be promised to users. They diverge as
+	// soon as quotas are handed out and not filled.
+	capUsed, err := s.quotaChecker().Used(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -91,15 +97,22 @@ func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
 			"quota": quota, "used": u.Used,
 		})
 	}
-	limit := map[string]any{"total": nil, "assignable": nil}
+	limit := map[string]any{"total": nil, "assignable": nil, "used": nil, "free": nil}
 	if capped {
-		limit = map[string]any{"total": s.quotaChecker().Total(), "assignable": assignable}
+		capTotal := s.quotaChecker().Total()
+		limit = map[string]any{
+			"total": capTotal, "assignable": assignable,
+			"used": capUsed, "free": max(int64(0), capTotal-capUsed),
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"disk": map[string]any{"total": total, "used": total - free, "free": free},
 		// limit is the STORAGE_TOTAL_GB cap: null when discodrive may use the whole disk.
 		"limit": limit,
-		"users": users,
+		// The same thresholds the alert email uses, so the tiles turn red exactly when
+		// the mail goes out — the panel never has its own opinion of "low".
+		"thresholds": map[string]any{"warn": quota.WarnFreePercent, "critical": quota.CritFreePercent},
+		"users":      users,
 	})
 }
 

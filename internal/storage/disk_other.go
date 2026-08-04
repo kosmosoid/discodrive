@@ -1,12 +1,12 @@
 //go:build !linux
 
-package api
+package storage
 
 import "syscall"
 
-// diskUsage for non-Linux (local builds on macOS): Darwin has no Frsize field,
+// DiskUsage for non-Linux (local builds on macOS): Darwin has no Frsize field,
 // and Blocks are already expressed in Bsize units, so Bsize is correct here.
-func diskUsage(path string) (total, free uint64, err error) {
+func DiskUsage(path string) (total, free uint64, err error) {
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(path, &st); err != nil {
 		return 0, 0, err

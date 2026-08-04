@@ -224,6 +224,9 @@ type Querier interface {
 	InsertWebAuthnCredential(ctx context.Context, arg InsertWebAuthnCredentialParams) (WebauthnCredential, error)
 	ListAddressbookObjects(ctx context.Context, addressbookID pgtype.UUID) ([]AddressbookObject, error)
 	ListAddressbooks(ctx context.Context, userID pgtype.UUID) ([]Addressbook, error)
+	// Administrators, in creation order — the recipients of server-wide alerts (storage
+	// filling up), which are addressed to whoever can actually act on them.
+	ListAdminIDs(ctx context.Context) ([]pgtype.UUID, error)
 	ListAllPodcastChannels(ctx context.Context) ([]PodcastChannel, error)
 	ListAuditLog(ctx context.Context, arg ListAuditLogParams) ([]AuditLog, error)
 	ListBookmarks(ctx context.Context, userID pgtype.UUID) ([]Bookmark, error)

@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,6 +35,11 @@ type Config struct {
 	PairingGCInterval time.Duration
 	VersionKeep       int
 	Debounce          time.Duration
+
+	// StorageTotal is the server-wide cap (STORAGE_TOTAL_GB) in bytes, 0 = unlimited.
+	// The storage-alert job needs it to say how much of the *allotted* space is left,
+	// which is not the same question as how much of the disk is left.
+	StorageTotal int64
 
 	PodcastRefreshInterval time.Duration
 	PodcastKeepPerChannel  int
@@ -83,10 +89,13 @@ type Worker struct {
 	ebookIdx *ebook.Indexer     // nil if ebook indexing is not configured
 	saved    *saved.Service     // nil if saved items are not configured
 	bm       *bookmarks.Service // nil if bookmark sync is not configured
+	// disk is storage.DiskUsage, replaced in tests: the free space of the machine the
+	// tests run on is not something a test can assert against.
+	disk func(path string) (total, free uint64, err error)
 }
 
 func New(fs *storage.FileService, root string, q *db.Queries, notifier *notify.Notifier, cfg Config, idx *music.Indexer, ebookIdx *ebook.Indexer, savedSvc *saved.Service, bookmarksSvc *bookmarks.Service) *Worker {
-	return &Worker{fs: fs, root: root, q: q, notify: notifier, cfg: cfg, idx: idx, ebookIdx: ebookIdx, saved: savedSvc, bm: bookmarksSvc}
+	return &Worker{fs: fs, root: root, q: q, notify: notifier, cfg: cfg, idx: idx, ebookIdx: ebookIdx, saved: savedSvc, bm: bookmarksSvc, disk: storage.DiskUsage}
 }
 
 // Run starts all background jobs and blocks until ctx is cancelled.
@@ -106,6 +115,7 @@ func (w *Worker) Run(ctx context.Context) {
 		return w.fs.TrashGC(ctx, w.cfg.TrashRetention)
 	})
 	go w.tick(ctx, w.cfg.QuotaInterval, "quota-notify", w.quotaNotify)
+	go w.tick(ctx, w.cfg.QuotaInterval, "storage-alert", w.storageAlert)
 	go w.tick(ctx, w.cfg.PairingGCInterval, "pairing-gc", func(ctx context.Context) error {
 		return w.q.DeleteExpiredPairings(ctx)
 	})
@@ -317,6 +327,92 @@ func (w *Worker) quotaNotify(ctx context.Context) error {
 		}
 	}
 	return w.q.ClearQuotaNotified(ctx)
+}
+
+// alertLevelSetting is where storageAlert remembers the level it last mailed about.
+// Without it a server parked below the threshold would mail every administrator on
+// every tick; with it, one mail per step down, and silence until things get worse.
+const alertLevelSetting = "storage.alert_level"
+
+// storageAlert warns the administrators before the service runs out of room. It watches
+// two limits at once — the physical disk and the server-wide cap (STORAGE_TOTAL_GB) —
+// because either can fill up while the other still looks comfortable, and reports
+// whichever is tighter.
+func (w *Worker) storageAlert(ctx context.Context) error {
+	diskTotal, diskFree, err := w.disk(w.root)
+	if err != nil {
+		return err
+	}
+	diskPercent := quota.FreePercent(int64(diskFree), int64(diskTotal))
+
+	// -1 means "no cap configured", which quota.LevelFor reads as "not an alarm".
+	limitPercent := -1
+	var limitFree int64
+	if w.cfg.StorageTotal > 0 {
+		used, err := w.q.TotalStorageUsage(ctx)
+		if err != nil {
+			return err
+		}
+		limitFree = max(int64(0), w.cfg.StorageTotal-used)
+		limitPercent = quota.FreePercent(limitFree, w.cfg.StorageTotal)
+	}
+	worst := diskPercent
+	if limitPercent >= 0 && (worst < 0 || limitPercent < worst) {
+		worst = limitPercent
+	}
+
+	was := w.storedAlertLevel(ctx)
+	level := quota.SettledLevel(worst, was)
+	if level == was {
+		return nil
+	}
+	if err := w.q.UpsertSetting(ctx, db.UpsertSettingParams{
+		Key: alertLevelSetting, Value: strconv.Itoa(int(level)),
+	}); err != nil {
+		return err
+	}
+	if level < was {
+		return nil // space was freed; record the recovery, but do not mail about it
+	}
+
+	limitNote := "no cap"
+	if limitPercent >= 0 {
+		limitNote = strconv.Itoa(limitPercent) + "%"
+	}
+	log.Printf("discodrive: storage-alert: %d%% free (disk %d%%, limit %s) — notifying admins",
+		worst, diskPercent, limitNote)
+	admins, err := w.q.ListAdminIDs(ctx)
+	if err != nil {
+		return err
+	}
+	data := map[string]any{
+		"Percent":      worst,
+		"DiskFree":     quota.HumanBytes(int64(diskFree)),
+		"DiskTotal":    quota.HumanBytes(int64(diskTotal)),
+		"DiskPercent":  diskPercent,
+		"HasLimit":     w.cfg.StorageTotal > 0,
+		"LimitFree":    quota.HumanBytes(limitFree),
+		"LimitTotal":   quota.HumanBytes(w.cfg.StorageTotal),
+		"LimitPercent": limitPercent,
+	}
+	for _, id := range admins {
+		w.notify.Emit(ctx, db.UUIDString(id), "storage.low_space", data)
+	}
+	return nil
+}
+
+// storedAlertLevel reads back the level storageAlert last acted on. An unreadable or
+// malformed value counts as "no alert yet" — worst case the admins get one more mail.
+func (w *Worker) storedAlertLevel(ctx context.Context) quota.Level {
+	row, err := w.q.GetSetting(ctx, alertLevelSetting)
+	if err != nil {
+		return quota.LevelOK
+	}
+	n, err := strconv.Atoi(row.Value)
+	if err != nil || n < int(quota.LevelOK) || n > int(quota.LevelCritical) {
+		return quota.LevelOK
+	}
+	return quota.Level(n)
 }
 
 // addRecursive adds a directory and all its subdirectories to the watcher, skipping

@@ -19,6 +19,7 @@ export default {
         muted: 'rgb(var(--c-muted) / <alpha-value>)',
         accent: 'rgb(var(--c-accent) / <alpha-value>)',
         accent2: 'rgb(var(--c-accent2) / <alpha-value>)',
+        warn: 'rgb(var(--c-warn) / <alpha-value>)',
         danger: 'rgb(var(--c-danger) / <alpha-value>)',
       },
       fontFamily: {

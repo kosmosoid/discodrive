@@ -230,7 +230,11 @@ func runServer(cfg config.Config) {
 	ebookIdx := ebook.NewIndexer(queries, cfg.StorageRoot)
 	tagEditor := music.NewTagEditor(queries, fileSvc, cfg.StorageRoot)
 	metaEditor := ebook.NewMetadataEditor(queries, cfg.StorageRoot)
-	go worker.New(fileSvc, cfg.StorageRoot, queries, notifier, worker.Default(cfg.VersionKeep, cfg.TrashDays, cfg.RescanSeconds), musicIdx, ebookIdx, savedSvc, bookmarksSvc).Run(ctx)
+	workerCfg := worker.Default(cfg.VersionKeep, cfg.TrashDays, cfg.RescanSeconds)
+	// Lets the storage-alert job warn the admins about the cap running out, not just
+	// about the disk running out.
+	workerCfg.StorageTotal = cfg.StorageTotalBytes()
+	go worker.New(fileSvc, cfg.StorageRoot, queries, notifier, workerCfg, musicIdx, ebookIdx, savedSvc, bookmarksSvc).Run(ctx)
 	// Reap abandoned resumable-upload sessions (idle > 1h) and their staged temp files.
 	go uploads.StartGC(ctx, 5*time.Minute, time.Hour)
 

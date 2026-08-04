@@ -13,6 +13,7 @@
   --c-muted: 107 124 147;
   --c-accent: 34 211 238;
   --c-accent2: 52 211 153;
+  --c-warn: 251 191 36;
   --c-danger: 248 113 113;
 }
 :root.light {
@@ -24,6 +25,7 @@
   --c-muted: 91 107 128;
   --c-accent: 8 145 178;
   --c-accent2: 5 150 105;
+  --c-warn: 217 119 6;
   --c-danger: 220 38 38;
 }
 

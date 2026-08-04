@@ -1536,6 +1536,32 @@ func (q *Queries) ListAddressbooks(ctx context.Context, userID pgtype.UUID) ([]A
 	return items, nil
 }
 
+const listAdminIDs = `-- name: ListAdminIDs :many
+SELECT id FROM users WHERE role = 'admin' ORDER BY created_at
+`
+
+// Administrators, in creation order — the recipients of server-wide alerts (storage
+// filling up), which are addressed to whoever can actually act on them.
+func (q *Queries) ListAdminIDs(ctx context.Context) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listAdminIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuditLog = `-- name: ListAuditLog :many
 SELECT id, user_id, event, ip, user_agent, detail, created_at FROM audit_log WHERE user_id = $1 ORDER BY id DESC LIMIT $2
 `
