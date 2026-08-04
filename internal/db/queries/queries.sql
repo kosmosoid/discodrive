@@ -20,6 +20,12 @@ SELECT language FROM users WHERE id = $1;
 -- name: SetUserLanguage :exec
 UPDATE users SET language = $2 WHERE id = $1;
 
+-- name: GetUserSessionTTL :one
+SELECT session_ttl_minutes FROM users WHERE id = $1;
+
+-- name: SetUserSessionTTL :exec
+UPDATE users SET session_ttl_minutes = $2 WHERE id = $1;
+
 -- name: ListUserIDs :many
 SELECT id FROM users;
 

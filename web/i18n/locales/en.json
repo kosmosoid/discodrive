@@ -620,6 +620,21 @@
     "regenerate_prompt": "Enter the current code from your authenticator app to regenerate backup codes",
     "regenerated": "New backup codes saved. Old ones are no longer valid."
   },
+  "session": {
+    "title": "Session",
+    "description": "The session slides: every action extends it. This setting is how long the browser may sit idle before you have to sign in again.",
+    "label": "Sign out after",
+    "opt_1h": "1 hour",
+    "opt_4h": "4 hours",
+    "opt_8h": "8 hours",
+    "opt_1d": "1 day",
+    "opt_7d": "7 days",
+    "opt_30d": "30 days",
+    "opt_never": "Never",
+    "never_warning": "The session never expires: anyone with access to this browser can see the contents of your account. Changing your password ends it.",
+    "saved": "Saved",
+    "error_save": "Could not save"
+  },
   "audit": {
     "title": "Security activity",
     "description": "Your last 50 security events.",

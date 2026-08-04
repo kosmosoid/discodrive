@@ -130,6 +130,10 @@ func NewRouter(authSvc *auth.Service, q *db.Queries, files *storage.FileService,
 	mux.Handle("GET /me/language", prot(http.HandlerFunc(s.handleGetLanguage)))
 	mux.Handle("PUT /me/language", prot(http.HandlerFunc(s.handleSetLanguage)))
 
+	// session lifetime (how long a session may stay idle before re-login)
+	mux.Handle("GET /me/session", prot(http.HandlerFunc(s.handleGetSession)))
+	mux.Handle("PUT /me/session", prot(http.HandlerFunc(s.handleSetSession)))
+
 	// external-access toggles (webdav/caldav/carddav enable flags)
 	mux.Handle("GET /me/access", prot(http.HandlerFunc(s.handleGetAccess)))
 	mux.Handle("PUT /me/access", prot(http.HandlerFunc(s.handlePutAccess)))

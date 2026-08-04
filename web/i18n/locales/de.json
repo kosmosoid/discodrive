@@ -593,6 +593,21 @@
     "regenerate_prompt": "Geben Sie den aktuellen Code aus Ihrer Authenticator-App ein, um Backup-Codes neu zu generieren",
     "regenerated": "Neue Backup-Codes gespeichert. Die alten sind nicht mehr gültig."
   },
+  "session": {
+    "title": "Sitzung",
+    "description": "Die Sitzung verlängert sich bei jeder Aktion. Diese Einstellung legt fest, wie lange der Browser untätig sein darf, bevor Sie sich erneut anmelden müssen.",
+    "label": "Abmelden nach",
+    "opt_1h": "1 Stunde",
+    "opt_4h": "4 Stunden",
+    "opt_8h": "8 Stunden",
+    "opt_1d": "1 Tag",
+    "opt_7d": "7 Tage",
+    "opt_30d": "30 Tage",
+    "opt_never": "Nie",
+    "never_warning": "Die Sitzung läuft nie ab: Wer Zugriff auf diesen Browser hat, kann die Inhalte Ihres Kontos sehen. Eine Passwortänderung beendet sie.",
+    "saved": "Gespeichert",
+    "error_save": "Konnte nicht gespeichert werden"
+  },
   "passkey": {
     "title": "Sicherheitsschlüssel / Passkeys",
     "description": "Passwortlose Anmeldung mit einem Hardware-Sicherheitsschlüssel (YubiKey, SoloKey), Geräte-Biometrie (Face ID, Touch ID, Windows Hello) oder einem Passwort-Manager (KeePassXC, 1Password, iCloud Keychain).",

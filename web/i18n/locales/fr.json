@@ -593,6 +593,21 @@
     "regenerate_prompt": "Saisissez le code actuel de votre application d'authentification pour régénérer les codes de secours",
     "regenerated": "Nouveaux codes de secours enregistrés. Les anciens ne sont plus valides."
   },
+  "session": {
+    "title": "Session",
+    "description": "La session se prolonge à chaque action. Ce réglage détermine combien de temps le navigateur peut rester inactif avant de devoir se reconnecter.",
+    "label": "Déconnexion après",
+    "opt_1h": "1 heure",
+    "opt_4h": "4 heures",
+    "opt_8h": "8 heures",
+    "opt_1d": "1 jour",
+    "opt_7d": "7 jours",
+    "opt_30d": "30 jours",
+    "opt_never": "Jamais",
+    "never_warning": "La session n'expire jamais : quiconque a accès à ce navigateur peut voir le contenu de votre compte. Changer votre mot de passe y met fin.",
+    "saved": "Enregistré",
+    "error_save": "Impossible d'enregistrer"
+  },
   "passkey": {
     "title": "Clés de sécurité / Passkeys",
     "description": "Connexion sans mot de passe avec une clé de sécurité matérielle (YubiKey, SoloKey), la biométrie de l'appareil (Face ID, Touch ID, Windows Hello) ou un gestionnaire de mots de passe (KeePassXC, 1Password, iCloud Keychain).",

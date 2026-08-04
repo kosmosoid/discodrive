@@ -600,7 +600,7 @@ func (q *Queries) CreateTenant(ctx context.Context, name string) (Tenant, error)
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (tenant_id, email, password_hash, storage_quota, role, must_change_password)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq
+RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq, session_ttl_minutes
 `
 
 type CreateUserParams struct {
@@ -638,6 +638,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.MustChangePassword,
 		&i.BookmarkSeq,
 		&i.BookmarkGcSeq,
+		&i.SessionTtlMinutes,
 	)
 	return i, err
 }
@@ -1256,7 +1257,7 @@ func (q *Queries) GetTrashedNodeForUser(ctx context.Context, arg GetTrashedNodeF
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq FROM users WHERE email = $1
+SELECT id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq, session_ttl_minutes FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -1278,12 +1279,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.MustChangePassword,
 		&i.BookmarkSeq,
 		&i.BookmarkGcSeq,
+		&i.SessionTtlMinutes,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq FROM users WHERE id = $1
+SELECT id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq, session_ttl_minutes FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -1305,6 +1307,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.MustChangePassword,
 		&i.BookmarkSeq,
 		&i.BookmarkGcSeq,
+		&i.SessionTtlMinutes,
 	)
 	return i, err
 }
@@ -1318,6 +1321,17 @@ func (q *Queries) GetUserLanguage(ctx context.Context, id pgtype.UUID) (string, 
 	var language string
 	err := row.Scan(&language)
 	return language, err
+}
+
+const getUserSessionTTL = `-- name: GetUserSessionTTL :one
+SELECT session_ttl_minutes FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserSessionTTL(ctx context.Context, id pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, getUserSessionTTL, id)
+	var session_ttl_minutes int32
+	err := row.Scan(&session_ttl_minutes)
+	return session_ttl_minutes, err
 }
 
 const getUserTOTP = `-- name: GetUserTOTP :one
@@ -2905,6 +2919,20 @@ func (q *Queries) SetUserLanguage(ctx context.Context, arg SetUserLanguageParams
 	return err
 }
 
+const setUserSessionTTL = `-- name: SetUserSessionTTL :exec
+UPDATE users SET session_ttl_minutes = $2 WHERE id = $1
+`
+
+type SetUserSessionTTLParams struct {
+	ID                pgtype.UUID `json:"id"`
+	SessionTtlMinutes int32       `json:"session_ttl_minutes"`
+}
+
+func (q *Queries) SetUserSessionTTL(ctx context.Context, arg SetUserSessionTTLParams) error {
+	_, err := q.db.Exec(ctx, setUserSessionTTL, arg.ID, arg.SessionTtlMinutes)
+	return err
+}
+
 const sharedAccessForUser = `-- name: SharedAccessForUser :one
 WITH RECURSIVE chain(node_id, parent_id) AS (
     SELECT n.id, n.parent_id FROM nodes n WHERE n.id = $2
@@ -3210,7 +3238,7 @@ func (q *Queries) UpdateNodeParent(ctx context.Context, arg UpdateNodeParentPara
 
 const updatePassword = `-- name: UpdatePassword :one
 UPDATE users SET password_hash = $2, token_version = token_version + 1, must_change_password = false
-WHERE id = $1 RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq
+WHERE id = $1 RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq, session_ttl_minutes
 `
 
 type UpdatePasswordParams struct {
@@ -3239,12 +3267,13 @@ func (q *Queries) UpdatePassword(ctx context.Context, arg UpdatePasswordParams) 
 		&i.MustChangePassword,
 		&i.BookmarkSeq,
 		&i.BookmarkGcSeq,
+		&i.SessionTtlMinutes,
 	)
 	return i, err
 }
 
 const updateUser = `-- name: UpdateUser :one
-UPDATE users SET storage_quota = $2, role = $3 WHERE id = $1 RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq
+UPDATE users SET storage_quota = $2, role = $3 WHERE id = $1 RETURNING id, tenant_id, email, password_hash, storage_quota, storage_used, created_at, role, change_seq, quota_notified_at, token_version, language, must_change_password, bookmark_seq, bookmark_gc_seq, session_ttl_minutes
 `
 
 type UpdateUserParams struct {
@@ -3272,6 +3301,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.MustChangePassword,
 		&i.BookmarkSeq,
 		&i.BookmarkGcSeq,
+		&i.SessionTtlMinutes,
 	)
 	return i, err
 }

@@ -84,7 +84,15 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 		// (new exp = now+TTL) and return it in X-Token; the client saves it. Idle
 		// longer than TTL → token expires → must log in again. We preserve device_id,
 		// otherwise renewal would silently drop the device binding. Header is set before the response body.
-		if fresh, e := s.issuer.Issue(claims.Subject, claims.TenantID, u.Role, u.TokenVersion, claims.DeviceID); e == nil {
+		//
+		// The TTL is the user's own session setting, read from the row we just loaded, so
+		// changing it in settings takes effect on the very next request. Device tokens
+		// (sync daemon) keep the server default: that session is not the browser's.
+		ttl := s.issuer.ttl
+		if claims.DeviceID == "" {
+			ttl = SessionTTL(u.SessionTtlMinutes)
+		}
+		if fresh, e := s.issuer.IssueTTL(claims.Subject, claims.TenantID, u.Role, u.TokenVersion, claims.DeviceID, ttl); e == nil {
 			w.Header().Set("X-Token", fresh)
 		}
 		// Authed responses carry a per-request X-Token, so they must never be cached:

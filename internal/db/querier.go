@@ -205,6 +205,7 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserLanguage(ctx context.Context, id pgtype.UUID) (string, error)
+	GetUserSessionTTL(ctx context.Context, id pgtype.UUID) (int32, error)
 	GetUserTOTP(ctx context.Context, userID pgtype.UUID) (UserTotp, error)
 	HardDeleteNode(ctx context.Context, id pgtype.UUID) error
 	HardDeleteSubtree(ctx context.Context, arg HardDeleteSubtreeParams) error
@@ -370,6 +371,7 @@ type Querier interface {
 	SetSavedItemError(ctx context.Context, arg SetSavedItemErrorParams) error
 	SetSharePasswordHash(ctx context.Context, arg SetSharePasswordHashParams) error
 	SetUserLanguage(ctx context.Context, arg SetUserLanguageParams) error
+	SetUserSessionTTL(ctx context.Context, arg SetUserSessionTTLParams) error
 	SharedAccessForUser(ctx context.Context, arg SharedAccessForUserParams) (SharedAccessForUserRow, error)
 	// Returns accessible songs of a given genre excluding a specific artist, in random order.
 	SimilarSongsByGenre(ctx context.Context, arg SimilarSongsByGenreParams) ([]SimilarSongsByGenreRow, error)

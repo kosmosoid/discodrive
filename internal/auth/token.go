@@ -37,9 +37,18 @@ func NewTokenIssuer(secret string, ttl time.Duration) *TokenIssuer {
 	return &TokenIssuer{secret: []byte(secret), ttl: ttl}
 }
 
-// Issue issues a JWT. deviceID is non-empty only for sync-device tokens (daemon);
-// pass "" for web sessions.
+// Issue issues a JWT with the issuer's default TTL. deviceID is non-empty only for
+// sync-device tokens (daemon); pass "" for web sessions.
 func (t *TokenIssuer) Issue(userID, tenantID, role string, ver int64, deviceID string) (string, error) {
+	return t.IssueTTL(userID, tenantID, role, ver, deviceID, t.ttl)
+}
+
+// IssueTTL is Issue with an explicit lifetime — the session length the user chose for
+// themselves (users.session_ttl_minutes). ttl <= 0 issues a token with no exp claim at
+// all: the user asked never to be signed out. Such a token is still revocable, since
+// the middleware re-checks users.token_version (bumped by a password change), the role
+// and, for devices, whether the device still exists on every single request.
+func (t *TokenIssuer) IssueTTL(userID, tenantID, role string, ver int64, deviceID string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		TenantID: tenantID,
@@ -47,12 +56,23 @@ func (t *TokenIssuer) Issue(userID, tenantID, role string, ver int64, deviceID s
 		Ver:      ver,
 		DeviceID: deviceID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   userID,
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(t.ttl)),
+			Subject:  userID,
+			IssuedAt: jwt.NewNumericDate(now),
 		},
 	}
+	if ttl > 0 {
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(ttl))
+	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(t.secret)
+}
+
+// SessionTTL converts users.session_ttl_minutes into a duration. 0 (never expires) stays
+// 0, which IssueTTL reads as "no exp claim".
+func SessionTTL(minutes int32) time.Duration {
+	if minutes <= 0 {
+		return 0
+	}
+	return time.Duration(minutes) * time.Minute
 }
 
 // mfaTokenTTL bounds the window to complete a second factor after the password step.

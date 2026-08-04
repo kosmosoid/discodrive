@@ -212,3 +212,42 @@ func TestMiddleware_AuthedResponseIsNoStore(t *testing.T) {
 		t.Errorf("X-Token missing — sliding renewal should still fire")
 	}
 }
+
+// The renewed token must carry the lifetime the user picked, not the server default —
+// otherwise the setting looks like it saved but the session still dies after an hour.
+func TestMiddleware_RenewalUsesUserSessionTTL(t *testing.T) {
+	iss := NewTokenIssuer("secret", time.Hour)
+	uid, _ := db.ParseUUID(validUUID)
+
+	// Device tokens are left out on purpose: verifying one hits the devices table, and
+	// their lifetime is the server default anyway (see the middleware).
+	renew := func(ttlMinutes int32) *Claims {
+		t.Helper()
+		svc := &Service{issuer: iss, lookupUser: func(context.Context, pgtype.UUID) (db.User, error) {
+			return db.User{ID: uid, Role: "user", SessionTtlMinutes: ttlMinutes}, nil
+		}}
+		tok, _ := iss.Issue(validUUID, "t1", "user", 0, "")
+		h := svc.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+		req := httptest.NewRequest(http.MethodGet, "/x", nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		fresh := rec.Header().Get("X-Token")
+		if fresh == "" {
+			t.Fatal("no X-Token on an authorized request")
+		}
+		claims, err := iss.Parse(fresh)
+		if err != nil {
+			t.Fatalf("parse renewed token: %v", err)
+		}
+		return claims
+	}
+
+	day := renew(1440)
+	if got := day.ExpiresAt.Sub(day.IssuedAt.Time); got != 24*time.Hour {
+		t.Fatalf("renewed lifetime = %v, want 24h", got)
+	}
+	if exp := renew(0).ExpiresAt; exp != nil {
+		t.Fatalf("ExpiresAt=%v for a never-expiring session, want nil", exp)
+	}
+}

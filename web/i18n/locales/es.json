@@ -593,6 +593,21 @@
     "regenerate_prompt": "Introduce el código actual de tu aplicación de autenticación para regenerar los códigos de respaldo",
     "regenerated": "Nuevos códigos de respaldo guardados. Los anteriores ya no son válidos."
   },
+  "session": {
+    "title": "Sesión",
+    "description": "La sesión se prolonga con cada acción. Este ajuste indica cuánto tiempo puede estar inactivo el navegador antes de tener que iniciar sesión de nuevo.",
+    "label": "Cerrar sesión tras",
+    "opt_1h": "1 hora",
+    "opt_4h": "4 horas",
+    "opt_8h": "8 horas",
+    "opt_1d": "1 día",
+    "opt_7d": "7 días",
+    "opt_30d": "30 días",
+    "opt_never": "Nunca",
+    "never_warning": "La sesión no caduca nunca: cualquiera con acceso a este navegador puede ver el contenido de tu cuenta. Cambiar la contraseña la termina.",
+    "saved": "Guardado",
+    "error_save": "No se pudo guardar"
+  },
   "passkey": {
     "title": "Claves de seguridad / Passkeys",
     "description": "Inicio de sesión sin contraseña con una clave de seguridad física (YubiKey, SoloKey), biometría del dispositivo (Face ID, Touch ID, Windows Hello) o un gestor de contraseñas (KeePassXC, 1Password, iCloud Keychain).",

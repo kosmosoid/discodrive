@@ -443,6 +443,7 @@ type User struct {
 	MustChangePassword bool               `json:"must_change_password"`
 	BookmarkSeq        int64              `json:"bookmark_seq"`
 	BookmarkGcSeq      int64              `json:"bookmark_gc_seq"`
+	SessionTtlMinutes  int32              `json:"session_ttl_minutes"`
 }
 
 type UserTotp struct {

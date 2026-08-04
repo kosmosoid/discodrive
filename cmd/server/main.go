@@ -45,6 +45,9 @@ import (
 	godavcarddav "github.com/emersion/go-webdav/carddav"
 )
 
+// tokenTTL is the fallback session lifetime: it covers device (sync daemon) tokens and
+// anything issued before a user row is at hand. Web sessions use the user's own
+// users.session_ttl_minutes, which starts at this same hour.
 const tokenTTL = time.Hour
 
 func main() {

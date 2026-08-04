@@ -23,12 +23,15 @@ export const useSetupNeeded = () => useState<boolean | null>('setupNeeded', () =
 // Drives whether the login screen offers the passkey button.
 export const useWebauthnEnabled = () => useState<boolean | null>('webauthnEnabled', () => null)
 
-// tokenExp returns the JWT's exp (unix seconds), or 0 if missing/unparseable.
-// Used to prevent a stale X-Token (from a cached/late response) from regressing the session.
-function tokenExp(t: string): number {
+// tokenIssuedAt returns the JWT's iat (unix seconds), or 0 if missing/unparseable.
+// Used to prevent a stale X-Token (from a cached/late response) from regressing the
+// session. It reads iat rather than exp because the lifetime is the user's own setting:
+// shortening it makes the next renewed token expire EARLIER than the current one, and
+// comparing exp would reject exactly the token that carries the new preference.
+function tokenIssuedAt(t: string): number {
   try {
     const payload = t.split('.')[1] || ''
-    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))).exp || 0
+    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))).iat || 0
   } catch {
     return 0
   }
@@ -62,7 +65,7 @@ export function useApi() {
       // Only adopt a renewed token if it isn't older than the current one. A cached
       // or slow-in-flight response can carry a stale X-Token; saving it would regress
       // the session to an earlier (possibly expired) token and force a spurious logout.
-      if (fresh && fresh !== sess.value.token && tokenExp(fresh) >= tokenExp(sess.value.token)) {
+      if (fresh && fresh !== sess.value.token && tokenIssuedAt(fresh) >= tokenIssuedAt(sess.value.token)) {
         setSession({ ...sess.value, token: fresh })
       }
       // Anything that is not a read can change how much space the user occupies —

@@ -43,6 +43,47 @@ async function changePassword() {
   }
 }
 
+// Session lifetime. The session slides — every request renews the token — so this is
+// how long the browser may sit idle before the next visit needs a fresh sign-in.
+// 0 = never expires; the server then issues a token without an expiry.
+const SESSION_OPTIONS: { minutes: number; key: string }[] = [
+  { minutes: 60, key: 'session.opt_1h' },
+  { minutes: 240, key: 'session.opt_4h' },
+  { minutes: 480, key: 'session.opt_8h' },
+  { minutes: 1440, key: 'session.opt_1d' },
+  { minutes: 10080, key: 'session.opt_7d' },
+  { minutes: 43200, key: 'session.opt_30d' },
+  { minutes: 0, key: 'session.opt_never' },
+]
+const sessionTtl = ref<number | null>(null)
+const sessionBusy = ref(false)
+const sessionError = ref('')
+const sessionOk = ref('')
+
+async function loadSessionTtl() {
+  try {
+    const res = await request<{ ttl_minutes: number }>('/me/session')
+    sessionTtl.value = res.ttl_minutes
+  } catch { /* silent */ }
+}
+onMounted(loadSessionTtl)
+
+async function saveSessionTtl(e: Event) {
+  const minutes = Number((e.target as HTMLSelectElement).value)
+  sessionError.value = ''
+  sessionOk.value = ''
+  sessionBusy.value = true
+  try {
+    await request('/me/session', { method: 'PUT', body: { ttl_minutes: minutes } })
+    sessionTtl.value = minutes
+    sessionOk.value = t('session.saved')
+  } catch (err: any) {
+    sessionError.value = err?.data?.error || t('session.error_save')
+  } finally {
+    sessionBusy.value = false
+  }
+}
+
 // Two-factor authentication (TOTP)
 const totpEnabled = ref<boolean | null>(null)
 const totpBusy = ref(false)
@@ -277,6 +318,35 @@ async function deletePasskey(pk: Passkey) {
           <Icon name="lucide:check" size="16" /> {{ pwOk }}
         </p>
       </div>
+    </div>
+
+    <!-- Session lifetime -->
+    <div class="mb-6 card p-5">
+      <h2 class="mb-3 text-sm font-medium text-muted">{{ t('session.title') }}</h2>
+      <p class="mb-3 text-xs text-muted">{{ t('session.description') }}</p>
+      <label class="flex items-center gap-3 text-sm">
+        <span class="text-muted">{{ t('session.label') }}</span>
+        <select
+          :value="sessionTtl ?? 60"
+          class="input w-44"
+          :disabled="sessionTtl === null || sessionBusy"
+          @change="saveSessionTtl"
+        >
+          <option v-for="opt in SESSION_OPTIONS" :key="opt.minutes" :value="opt.minutes">
+            {{ t(opt.key) }}
+          </option>
+        </select>
+        <Icon v-if="sessionBusy" name="lucide:loader-circle" class="animate-spin text-muted" size="16" />
+      </label>
+      <p v-if="sessionTtl === 0" class="mt-2 flex items-center gap-2 text-xs text-warn">
+        <Icon name="lucide:triangle-alert" size="14" /> {{ t('session.never_warning') }}
+      </p>
+      <p v-if="sessionOk" class="mt-2 flex items-center gap-2 text-sm text-accent">
+        <Icon name="lucide:check" size="14" /> {{ sessionOk }}
+      </p>
+      <p v-if="sessionError" class="mt-2 flex items-center gap-2 text-sm text-danger">
+        <Icon name="lucide:triangle-alert" size="14" /> {{ sessionError }}
+      </p>
     </div>
 
     <!-- Two-factor authentication -->

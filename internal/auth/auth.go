@@ -266,8 +266,12 @@ func (s *Service) AdminCreateUser(ctx context.Context, email, password, role str
 	return user, nil
 }
 
+// issueFor issues a web-session token with the lifetime the user chose in their own
+// settings (0 = never expires). Devices are deliberately not covered: a daemon's token
+// answers to the device's own lifecycle, not to a browser preference.
 func (s *Service) issueFor(u db.User) (string, error) {
-	return s.issuer.Issue(db.UUIDString(u.ID), db.UUIDString(u.TenantID), u.Role, u.TokenVersion, "")
+	return s.issuer.IssueTTL(db.UUIDString(u.ID), db.UUIDString(u.TenantID), u.Role, u.TokenVersion, "",
+		SessionTTL(u.SessionTtlMinutes))
 }
 
 // issueForDevice issues a token bound to a specific device (sync daemon): it carries
